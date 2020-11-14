@@ -91,6 +91,11 @@ def create_refinement_inputs(root_dir, classes, intrinsic_matrix):
             obj_img = obj_img.transpose(0, 1).transpose(0, 2).unsqueeze(dim=0)
             obj_img = upsampled(obj_img)
             obj_img = obj_img.squeeze().transpose(0, 2).transpose(0, 1)
+
+            # It appears obj_img occasionally has values slightly larger than 1.0.
+            # So I'm assuming that we're only clamping by a slight amount here.
+            # If that's not the case, we need to scale.
+            obj_img = torch.clamp(obj_img, 0.0, 1.0)
             mpimg.imsave(adr_img, obj_img.squeeze().numpy())
 
             # create rendering for an object
