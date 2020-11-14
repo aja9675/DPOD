@@ -104,8 +104,13 @@ def train_pose_refinement(root_dir, classes, epochs=5):
         ###################
         # train the model #
         ###################
+        print("----- Training pose refiner --------")
         pose_refiner.train()
         for label, image, rendered, true_pose, pred_pose in train_loader:
+            if isinstance(label, str) or len(label) != batch_size:
+                print("Warning. Got '%s' for label from loader instead of batch size %i. "
+                    "Skipping these samples" % (str(label), batch_size))
+                continue
             # move tensors to GPU
             image, rendered = image.cuda(), rendered.cuda()
             # clear the gradients of all optimized variables
@@ -139,8 +144,13 @@ def train_pose_refinement(root_dir, classes, epochs=5):
         ######################
         # validate the model #
         ######################
+        print("----- Validating pose refiner --------")
         pose_refiner.eval()
         for label, image, rendered, true_pose, pred_pose in valid_loader:
+            if isinstance(label, str) or len(label) != batch_size:
+                print("Warning. Got '%s' for label from loader instead of batch size %i. "
+                    "Skipping these samples" % (str(label), batch_size))
+                continue
             # move tensors to GPU
             image, rendered = image.cuda(), rendered.cuda()
             # forward pass: compute predicted outputs by passing inputs to the model
