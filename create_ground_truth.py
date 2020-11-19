@@ -168,13 +168,12 @@ def dataset_dir_structure(root_dir):
     classes = ['ape', 'benchviseblue', 'can', 'cat', 'driller', 'duck', 'glue', 'holepuncher',
                'iron', 'lamp', 'phone', 'cam', 'eggbox']
 
-    for label in classes:  # create directories to store data
-        os.mkdir(root_dir + label + "/predicted_pose")
-        os.mkdir(root_dir + label + "/ground_truth")
-        os.mkdir(root_dir + label + "/ground_truth/IDmasks")
-        os.mkdir(root_dir + label + "/ground_truth/Umasks")
-        os.mkdir(root_dir + label + "/ground_truth/Vmasks")
-        os.mkdir(root_dir + label + "/changed_background")
-        os.mkdir(root_dir + label + "/pose_refinement")
-        os.mkdir(root_dir + label + "/pose_refinement/real")
-        os.mkdir(root_dir + label + "/pose_refinement/rendered")
+    dirs = ["/predicted_pose", "/pose_refinement", "/pose_refinement/real", "/pose_refinement/rendered", \
+            "/ground_truth", "/ground_truth/IDmasks", "/ground_truth/Umasks", \
+            "/ground_truth/Vmasks", "/changed_background"]
+
+    # create directories to store data
+    for label in classes:
+        for d in dirs:
+            if not os.path.exists(os.path.join(root_dir, label, d)):
+                os.mkdir(os.path.join(root_dir, label, d))
