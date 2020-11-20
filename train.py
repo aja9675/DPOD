@@ -36,7 +36,7 @@ num_images = len(list_all_images)
 indices = list(range(num_images))
 np.random.seed(69)
 np.random.shuffle(indices)
-split = int(np.floor(args.split * num_images))
+split = int(np.floor(float(args.split) * num_images))
 train_idx, test_idx = indices[:split], indices[split:]
 
 print("Total number of images: ", num_images)
