@@ -14,6 +14,9 @@ from pose_refinement import train_pose_refinement
 from correspondence_block import train_correspondence_block
 from create_ground_truth import create_GT_masks, create_UV_XYZ_dictionary, dataset_dir_structure
 
+classes = {'ape': 1, 'benchviseblue': 2, 'cam': 3, 'can': 4, 'cat': 5, 'driller': 6,
+           'duck': 7, 'eggbox': 8, 'glue': 9, 'holepuncher': 10, 'iron': 11, 'lamp': 12, 'phone': 13}
+
 parser = argparse.ArgumentParser(
     description='Script to create the Ground Truth masks')
 parser.add_argument("--root_dir", default="LineMOD_Dataset/",
@@ -21,10 +24,18 @@ parser.add_argument("--root_dir", default="LineMOD_Dataset/",
 parser.add_argument("--bgd_dir", default="val2017/",
                     help="path to background images dataset directory")
 parser.add_argument("--split", default=0.15, help="train:test split ratio")
+parser.add_argument("-c", "--correspondence_block", action='store_true', help="Only train correspondence block")
+parser.add_argument("--epochs", default=20, help="correspondence block epochs")
 args = parser.parse_args()
 
 root_dir = args.root_dir
 background_dir = args.bgd_dir
+
+if args.correspondence_block:
+	print("------ Started training of the correspondence block ------")
+	train_correspondence_block(root_dir, classes, epochs=int(args.epochs))
+	print("------ Training Finished ------")
+	sys.exit(0)
 
 list_all_images = []
 for root, dirs, files in os.walk(root_dir):
@@ -56,8 +67,6 @@ fy = 573.57043
 py = 242.04899
 intrinsic_matrix = np.array([[fx, 0, px], [0, fy, py], [0, 0, 1]])
 
-classes = {'ape': 1, 'benchviseblue': 2, 'cam': 3, 'can': 4, 'cat': 5, 'driller': 6,
-           'duck': 7, 'eggbox': 8, 'glue': 9, 'holepuncher': 10, 'iron': 11, 'lamp': 12, 'phone': 13}
 
 print("------ Start creating ground truth ------")
 create_GT_masks(root_dir, background_dir, intrinsic_matrix, classes)
@@ -66,7 +75,7 @@ print("----- Finished creating ground truth -----")
 
 
 print("------ Started training of the correspondence block ------")
-train_correspondence_block(root_dir, classes, epochs=20)
+train_correspondence_block(root_dir, classes, epochs=int(args.epochs))
 print("------ Training Finished ------")
 
 print("------ Started Initial pose estimation ------")
