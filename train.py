@@ -15,7 +15,11 @@ from pose_block import initial_pose_estimation
 from create_renderings import create_refinement_inputs
 from pose_refinement import train_pose_refinement
 from correspondence_block import train_correspondence_block
-from create_ground_truth import create_GT_masks, create_UV_XYZ_dictionary
+from create_ground_truth import create_GT_masks, create_UV_XYZ_dictionary, check_dataset_dir_structure
+
+# Update classes if you're using a different dataset
+classes = {'ape': 1, 'benchviseblue': 2, 'cam': 3, 'can': 4, 'cat': 5, 'driller': 6,
+			'duck': 7, 'eggbox': 8, 'glue': 9, 'holepuncher': 10, 'iron': 11, 'lamp': 12, 'phone': 13}
 
 list_of_actions = ["train_correspondence", "initial_pose_estimation", "create_refinement_inputs", "train_pose_refinement"]
 
@@ -30,9 +34,11 @@ args = parser.parse_args()
 root_dir = args.root_dir
 train_eval_dir = args.train_eval_dir
 action = args.action
+print("Action: %s" % action)
+epochs = int(args.epochs)
 
 # Check we at least have the dirs we're expecting
-check_dataset_dir_structure(root_dir, train_eval_dir)
+check_dataset_dir_structure(root_dir, train_eval_dir, classes)
 
 # Intrinsic Parameters of the Camera
 fx = 572.41140
@@ -41,12 +47,11 @@ fy = 573.57043
 py = 242.04899
 intrinsic_matrix = np.array([[fx, 0, px], [0, fy, py], [0, 0, 1]])
 
-classes = {'ape': 1, 'benchviseblue': 2, 'cam': 3, 'can': 4, 'cat': 5, 'driller': 6,
-           'duck': 7, 'eggbox': 8, 'glue': 9, 'holepuncher': 10, 'iron': 11, 'lamp': 12, 'phone': 13}
 
-if action == "train_correspondence_block":
+if action == "train_correspondence":
+	print("Training for %i epochs" % epochs)
 	print("------ Started training of the correspondence block ------")
-	train_correspondence_block(root_dir, train_eval_dir, classes, epochs=int(args.epochs))
+	train_correspondence_block(root_dir, train_eval_dir, classes, epochs=epochs)
 	print("------ Training Finished ------")
 
 if action == "initial_pose_estimation":

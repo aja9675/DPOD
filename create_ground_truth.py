@@ -1,3 +1,4 @@
+import sys
 import os
 import re
 import cv2
@@ -175,16 +176,20 @@ def test_dir_structure(test_val_dir, classes):
 
     for label in classes:  # create directories to store data
         for d in dirs:
-            #if not os.path.exists(test_val_dir, label, d):
-            # Error out if dir already exists
-            os.makedirs(os.path.join(test_val_dir, label, d))
+            # Error out if dir already exists?
+            if not os.path.exists(os.path.join(test_val_dir, label, d)):
+                os.makedirs(os.path.join(test_val_dir, label, d))
 
 def check_dataset_dir_structure(root_dir, test_val_dir, classes):
 
-    dirs = ["predicted_pose", "pose_refinement", "pose_refinement/real", "pose_refinement/rendered", \
-            "ground_truth", "ground_truth/IDmasks", "ground_truth/Umasks", \
-            "ground_truthVmasks", "changed_background"]
+    gt_dirs = ["ground_truth", "ground_truth/IDmasks", "ground_truth/Umasks", \
+            "ground_truth/Vmasks", "changed_background"]
+    test_eval_dirs = ["predicted_pose", "pose_refinement", "pose_refinement/real", "pose_refinement/rendered"]
 
     for label in classes:
-        for d in dirs:
-            assert(os.path.exists(os.path.join(root_dir, label, d)))
+        for d in gt_dirs:
+            if not os.path.exists(os.path.join(root_dir, label, d)):
+                sys.exit("Error. '%s' doesn't exist" % os.path.join(root_dir, label, d))
+        for d in test_eval_dirs:
+            if not os.path.exists(os.path.join(test_val_dir, label, d)):
+                sys.exit("Error. '%s' doesn't exist" % os.path.join(test_val_dir, label, d))
