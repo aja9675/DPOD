@@ -63,6 +63,8 @@ print(" Total number of training images: ", len(train_idx))
 print(" Total number of testing images: ", len(test_idx))
 
 # Save the test/train split to the unique training dir
+if not os.path.exists(train_eval_dir):
+	os.path.makedirs(train_eval_dir)
 save_obj(train_idx, os.path.join(train_eval_dir, "train_images_indices"))
 save_obj(test_idx, os.path.join(train_eval_dir, "test_images_indices"))
 # Create test/eval dir structure
