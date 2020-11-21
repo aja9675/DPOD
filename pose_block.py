@@ -1,3 +1,4 @@
+import sys
 import os
 import re
 import cv2
@@ -14,24 +15,28 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from dataset_classes import LineMODDataset
 
 
-def initial_pose_estimation(root_dir, classes, intrinsic_matrix):
+def initial_pose_estimation(root_dir, train_eval_dir, classes, intrinsic_matrix):
+
+    for c in classes:
+        class_pred_pose_fname = os.path.join(train_eval_dir, c, "predicted_pose")
+        if not os.path.exists(class_pred_pose_fname):
+            os.makedirs(class_pred_pose_fname)
 
     # LineMOD Dataset
-    train_data = LineMODDataset(root_dir, classes=classes,
+    train_data = LineMODDataset(root_dir, train_eval_dir, classes=classes,
                                 transform=transforms.Compose([transforms.ToTensor()]))
 
     # load the best correspondence block weights
-    correspondence_block = UNET.UNet(
-        n_channels=3, out_channels_id=14, out_channels_uv=256, bilinear=True)
+    correspondence_block = UNET.UNet(n_channels=3, out_channels_id=14, out_channels_uv=256, bilinear=True)
     correspondence_block.cuda()
-    correspondence_block.load_state_dict(torch.load(
-        'correspondence_block.pt', map_location=torch.device('cpu')))
+    correspondence_block_filename = os.path.join(train_eval_dir, 'correspondence_block.pt')
+    correspondence_block.load_state_dict(torch.load(correspondence_block_filename, map_location=torch.device('cpu')))
 
     # initial 6D pose prediction
     regex = re.compile(r'\d+')
     outliers = 0
     for i in range(len(train_data)):
-        if i % 1000 == 0:
+        if i % 100 == 0:
             print(str(i) + "/" + str(len(train_data)) + " finished!")
         img_adr, img, idmask, _, _ = train_data[i]
         label = os.path.split(os.path.split(os.path.dirname(img_adr))[0])[1]
@@ -44,8 +49,7 @@ def initial_pose_estimation(root_dir, classes, intrinsic_matrix):
         vpred = torch.argmax(vmask_pred, dim=1).squeeze().cpu()
         coord_2d = (temp == classes[label]).nonzero(as_tuple=True)
 
-        adr = root_dir + label + "/predicted_pose/" + \
-            "info_" + str(idx) + ".txt"
+        adr = os.path.join(train_eval_dir, label + "/predicted_pose/" + "info_" + str(idx) + ".txt")
 
         coord_2d = torch.cat((coord_2d[0].view(
             coord_2d[0].shape[0], 1), coord_2d[1].view(coord_2d[1].shape[0], 1)), 1)
@@ -53,7 +57,7 @@ def initial_pose_estimation(root_dir, classes, intrinsic_matrix):
         vvalues = vpred[coord_2d[:, 0], coord_2d[:, 1]]
         dct_keys = torch.cat((uvalues.view(-1, 1), vvalues.view(-1, 1)), 1)
         dct_keys = tuple(dct_keys.numpy())
-        dct = load_obj(root_dir + label + "/UV-XYZ_mapping")
+        dct = load_obj(os.path.join(root_dir, label + "/UV-XYZ_mapping"))
         mapping_2d = []
         mapping_3d = []
         for count, (u, v) in enumerate(dct_keys):

@@ -15,12 +15,9 @@ from create_ground_truth import get_rot_tra
 
 def create_rendering(root_dir, intrinsic_matrix, obj, idx):
     # helper function to help with creating renderings
-    pred_pose_adr = root_dir + obj + \
-        '/predicted_pose' + '/info_' + str(idx) + ".txt"
-    rgb_values = np.loadtxt(root_dir + obj + '/object.xyz',
-                            skiprows=1, usecols=(6, 7, 8))
-    coords_3d = np.loadtxt(root_dir + obj + '/object.xyz',
-                           skiprows=1, usecols=(0, 1, 2))
+    pred_pose_adr = root_dir + obj + '/predicted_pose' + '/info_' + str(idx) + ".txt"
+    rgb_values = np.loadtxt(root_dir + obj + '/object.xyz', skiprows=1, usecols=(6, 7, 8))
+    coords_3d = np.loadtxt(root_dir + obj + '/object.xyz', skiprows=1, usecols=(0, 1, 2))
     ones = np.ones((coords_3d.shape[0], 1))
     homogenous_coordinate = np.append(coords_3d, ones, axis=1)
     rigid_transformation = np.loadtxt(pred_pose_adr)
@@ -48,12 +45,12 @@ def create_rendering(root_dir, intrinsic_matrix, obj, idx):
     return cropped_rendered_image
 
 
-def create_refinement_inputs(root_dir, classes, intrinsic_matrix):
+def create_refinement_inputs(root_dir, train_eval_dir, classes, intrinsic_matrix):
     correspondence_block = UNET.UNet(
         n_channels=3, out_channels_id=14, out_channels_uv=256, bilinear=True)
     correspondence_block.cuda()
-    correspondence_block.load_state_dict(torch.load(
-        'correspondence_block.pt', map_location=torch.device('cpu')))
+    correspondence_block_filename = os.path.join(train_eval_dir, 'correspondence_block.pt')
+    correspondence_block.load_state_dict(torch.load(correspondence_block_filename, map_location=torch.device('cpu')))
 
     train_data = LineMODDataset(root_dir, classes=classes,
                                 transform=transforms.Compose([transforms.ToTensor()]))
@@ -99,8 +96,7 @@ def create_refinement_inputs(root_dir, classes, intrinsic_matrix):
             mpimg.imsave(adr_img, obj_img.squeeze().numpy())
 
             # create rendering for an object
-            cropped_rendered_image = create_rendering(
-                root_dir, intrinsic_matrix, label, idx)
+            cropped_rendered_image = create_rendering(root_dir, intrinsic_matrix, label, idx)
             rendered_img = torch.from_numpy(cropped_rendered_image)
             rendered_img = rendered_img.unsqueeze(dim=0)
             rendered_img = rendered_img.transpose(1, 3).transpose(2, 3)

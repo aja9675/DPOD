@@ -22,10 +22,8 @@ from torchvision import transforms
 
 def create_rendering(root_dir, intrinsic_matrix, obj, rigid_transformation):
     # helper function to help with creating renderings
-    rgb_values = np.loadtxt(root_dir + obj + '/object.xyz',
-                            skiprows=1, usecols=(6, 7, 8))
-    coords_3d = np.loadtxt(root_dir + obj + '/object.xyz',
-                           skiprows=1, usecols=(0, 1, 2))
+    rgb_values = np.loadtxt(os.path.join(root_dir, obj + '/object.xyz', skiprows=1, usecols=(6, 7, 8)))
+    coords_3d = np.loadtxt(os.path.join(root_dir, obj + '/object.xyz', skiprows=1, usecols=(0, 1, 2)))
     ones = np.ones((coords_3d.shape[0], 1))
     homogenous_coordinate = np.append(coords_3d, ones, axis=1)
     # Perspective Projection to obtain 2D coordinates
@@ -52,13 +50,13 @@ def create_rendering(root_dir, intrinsic_matrix, obj, rigid_transformation):
     return cropped_rendered_img
 
 
-parser = argparse.ArgumentParser(
-    description='Script to create the Ground Truth masks')
-parser.add_argument("--root_dir", default="/home/jovyan/work/LineMOD_Dataset/",
-                    help="path to dataset directory")
+parser = argparse.ArgumentParser(description='Script to create the Ground Truth masks')
+parser.add_argument("root_dir", help="path to dataset directory (LineMOD_Dataset)")
+parser.add_argument("train_eval_dir", help="path to dir to store training run specific info")
 args = parser.parse_args()
 
 root_dir = args.root_dir
+train_eval_dir = args.train_eval_dir
 
 classes = {'ape': 1, 'benchviseblue': 2, 'cam': 3, 'can': 4, 'cat': 5, 'driller': 6,
            'duck': 7, 'eggbox': 8, 'glue': 9, 'holepuncher': 10, 'iron': 11, 'lamp': 12, 'phone': 13}
@@ -79,51 +77,54 @@ fy = 573.57043
 py = 242.04899  # Intrinsic Parameters of the Camera
 intrinsic_matrix = np.array([[fx, 0, px], [0, fy, py], [0, 0, 1]])
 
-correspondence_block = UNET.UNet(n_channels=3, out_channels_id=14,
-                                 out_channels_uv=256, bilinear=True)
+correspondence_block = UNET.UNet(n_channels=3, out_channels_id=14, out_channels_uv=256, bilinear=True)
+
+print("Loading correspondence block")
 # load the best weights from the training loop
-correspondence_block.load_state_dict(torch.load(
-    'correspondence_block.pt', map_location=torch.device('cpu')))
+correspondence_block_filename = os.path.join(train_eval_dir, 'correspondence_block.pt')
+correspondence_block.load_state_dict(torch.load(correspondence_block_filename, map_location=torch.device('cpu')))
 pose_refiner = Pose_Refiner()
+
+print("Loading pose_refiner block")
 # load the best weights from the training loop
-pose_refiner.load_state_dict(torch.load(
-    'pose_refiner.pt', map_location=torch.device('cpu')))
+pose_refiner.load_state_dict(torch.load('pose_refiner.pt', map_location=torch.device('cpu')))
 
 correspondence_block.cuda()
 pose_refiner.cuda()
 pose_refiner.eval()
 correspondence_block.eval()
 
-list_all_images = load_obj(root_dir + "all_images_adr")
-testing_images_idx = load_obj(root_dir + "test_images_indices")
+print("Listing all images")
+list_all_images = load_obj(sys.path.join(root_dir, "all_images_adr"))
+testing_images_idx = load_obj(sys.path.join(train_eval_dir, "test_images_indices"))
 
 regex = re.compile(r'\d+')
 upsampled = nn.Upsample(size=[240, 320], mode='bilinear', align_corners=False)
 total_score = 0
+print("For all %i test images..." % len(testing_images_idx))
 for i in range(len(testing_images_idx)):
+    if i % 100 == 0:
+        print("\t %i / %i" % (i, len(testing_images_idx)))
 
     img_adr = list_all_images[testing_images_idx[i]]
     label = os.path.split(os.path.split(os.path.dirname(img_adr))[0])[1]
     idx = regex.findall(os.path.split(img_adr)[1])[0]
 
-    tra_adr = root_dir + label + "/data/tra" + str(idx) + ".tra"
-    rot_adr = root_dir + label + "/data/rot" + str(idx) + ".rot"
+    tra_adr = os.path.join(root_dir, label + "/data/tra" + str(idx) + ".tra")
+    rot_adr = os.path.join(root_dir, label + "/data/rot" + str(idx) + ".rot")
     true_pose = get_rot_tra(rot_adr, tra_adr)
 
     test_img = cv2.imread(img_adr)
-    test_img = cv2.resize(
-        test_img, (test_img.shape[1]//2, test_img.shape[0]//2), interpolation=cv2.INTER_AREA)
+    test_img = cv2.resize(test_img, (test_img.shape[1]//2, test_img.shape[0]//2), interpolation=cv2.INTER_AREA)
 
     test_img = torch.from_numpy(test_img).type(torch.double)
     test_img = test_img.transpose(1, 2).transpose(0, 1)
 
     if len(test_img.shape) != 4:
-        test_img = test_img.view(
-            1, test_img.shape[0], test_img.shape[1], test_img.shape[2])
+        test_img = test_img.view(1, test_img.shape[0], test_img.shape[1], test_img.shape[2])
 
     # pass through correspondence block
-    idmask_pred, umask_pred, vmask_pred = correspondence_block(
-        test_img.float().cuda())
+    idmask_pred, umask_pred, vmask_pred = correspondence_block(test_img.float().cuda())
 
     # convert the masks to 240,320 shape
     temp = torch.argmax(idmask_pred, dim=1).squeeze().cpu()
@@ -137,7 +138,7 @@ for i in range(len(testing_images_idx)):
         vvalues = vpred[coord_2d[:, 0], coord_2d[:, 1]]
         dct_keys = torch.cat((uvalues.view(-1, 1), vvalues.view(-1, 1)), 1)
         dct_keys = tuple(dct_keys.numpy())
-        dct = load_obj(root_dir + label + "/UV-XYZ_mapping")
+        dct = load_obj(os.path.join(root_dir, label + "/UV-XYZ_mapping"))
         mapping_2d = []
         mapping_3d = []
         for count, (u, v) in enumerate(dct_keys):
@@ -168,8 +169,7 @@ for i in range(len(testing_images_idx)):
         obj_img = obj_img.squeeze().transpose(0, 2).transpose(0, 1)
         obj_img = transform(torch.as_tensor(obj_img, dtype=torch.float32))
         # create rendering for an object
-        cropped_rendered_img = create_rendering(
-            root_dir, intrinsic_matrix, label, pred_pose)
+        cropped_rendered_img = create_rendering(root_dir, intrinsic_matrix, label, pred_pose)
         rendered_img = torch.from_numpy(cropped_rendered_img)
         rendered_img = rendered_img.unsqueeze(dim=0)
         rendered_img = rendered_img.transpose(1, 3).transpose(2, 3)
@@ -205,8 +205,8 @@ for i in range(len(testing_images_idx)):
         pred_pose[1, 3] = xy[1]
         pred_pose[2, 3] = z
 
-        diameter = np.loadtxt(root_dir + label + "/distance.txt")
-        ptcld_file = root_dir + label + "/object.xyz"
+        diameter = np.loadtxt(os.path.join(root_dir, label + "/distance.txt"))
+        ptcld_file = os.path.join(root_dir, label + "/object.xyz")
         pt_cld = np.loadtxt(ptcld_file, skiprows=1, usecols=(0, 1, 2))
         score = ADD_score(pt_cld, true_pose, pred_pose, diameter)
         total_score += score

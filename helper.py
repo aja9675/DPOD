@@ -1,3 +1,4 @@
+import sys
 import cv2
 import torch
 import pickle
@@ -16,6 +17,12 @@ def load_obj(name):
         return pickle.load(f)
 
 # helper function to plot grpahs
+
+def showImage(window="image", img=None):
+    cv2.imshow(window, img)
+    key = cv2.waitKey(0) & 0xFF
+    if key == 27:
+        sys.exit(0)
 
 
 def visualize(array):
@@ -74,16 +81,45 @@ def create_bounding_box(img, pose, pt_cld_data, intrinsic_matrix,color=(0,0,255)
     return img
 
 
+def draw_axis(img, pose, intrinsic_matrix, colors=[(0,0,255), (0,255,0), (255,0,0)], axis_len=10):
+    # If only one color is specified
+    if np.shape(colors) != (3,3):
+        colors = [colors] * 3
+
+    rvec = pose[0:3, 0:3]
+    tvec = pose[:,3]
+
+    origin_pt_3d = np.array([0,0,0], dtype=np.float32)
+    origin_pt, jac = cv2.projectPoints(origin_pt_3d, rvec, tvec, intrinsic_matrix, None)
+    origin_pt = np.int32(np.squeeze(origin_pt))
+
+    axis = np.float32([[axis_len,0,0], [0,axis_len,0], [0,0,axis_len]]).reshape(-1,3)
+    imgpts, jac = cv2.projectPoints(axis, rvec, tvec, intrinsic_matrix, None)
+
+    # Use same color-axis convention as RVIZ, X-R, Y-G, Z-B
+    img = cv2.line(img, tuple(origin_pt), tuple(imgpts[0].ravel()), colors[0], 2) # X - R
+    img = cv2.line(img, tuple(origin_pt), tuple(imgpts[1].ravel()), colors[1], 2) # Y - G
+    img = cv2.line(img, tuple(origin_pt), tuple(imgpts[2].ravel()), colors[2], 2) # Z - B
+
+    return img
+
+
 def ADD_score(pt_cld, true_pose, pred_pose, diameter):
     "Evaluation metric - ADD score"
-    pred_pose[0:3, 0:3][np.isnan(pred_pose[0:3, 0:3])] = 1
-    pred_pose[:, 3][np.isnan(pred_pose[:, 3])] = 0
-    target = pt_cld @ true_pose[0:3, 0:3] + np.array(
-        [true_pose[0, 3], true_pose[1, 3], true_pose[2, 3]])
-    output = pt_cld @ pred_pose[0:3, 0:3] + np.array(
-        [pred_pose[0, 3], pred_pose[1, 3], pred_pose[2, 3]])
-    avg_distance = (np.linalg.norm(output - target))/pt_cld.shape[0]
+    #pred_pose[0:3, 0:3][np.isnan(pred_pose[0:3, 0:3])] = 1
+    # The following is cheating...
+    #pred_pose[:, 3][np.isnan(pred_pose[:, 3])] = 0
+    target = pt_cld @ true_pose[0:3, 0:3] + np.array([true_pose[0, 3], true_pose[1, 3], true_pose[2, 3]])
+    output = pt_cld @ pred_pose[0:3, 0:3] + np.array([pred_pose[0, 3], pred_pose[1, 3], pred_pose[2, 3]])
+    avg_distance = (np.linalg.norm(output - target)) / pt_cld.shape[0]
+    print("avg_distance %f: " % avg_distance)
     threshold = diameter * 0.1
+    print("threshold %f: " % threshold)
+
+    # Draw the pointcloud
+    for pt in target:
+        img = cv2.circle(full_img, (pt[0],pt[1]), 5, (0,0,255), 1)
+
     if avg_distance <= threshold:
         return 1
     else:

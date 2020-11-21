@@ -12,9 +12,9 @@ from torch.utils.data.sampler import SubsetRandomSampler
 
 from dataset_classes import LineMODDataset
 
-def train_correspondence_block(root_dir, classes, epochs=10):
+def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10):
 
-    train_data = LineMODDataset(root_dir, classes=classes,
+    train_data = LineMODDataset(root_dir, train_eval_dir, classes=classes,
                                 transform=transforms.Compose([transforms.ToTensor(),
                                 transforms.ColorJitter(brightness=0, contrast=0, saturation=0, hue=0)]))
 
@@ -39,8 +39,7 @@ def train_correspondence_block(root_dir, classes, epochs=10):
                                                sampler=valid_sampler, num_workers=num_workers)
 
     # architecture for correspondence block - 13 objects + backgound = 14 channels for ID masks
-    correspondence_block = UNET.UNet(
-        n_channels=3, out_channels_id=14, out_channels_uv=256, bilinear=True)
+    correspondence_block = UNET.UNet(n_channels=3, out_channels_id=14, out_channels_uv=256, bilinear=True)
     correspondence_block.cuda()
 
     # custom loss function and optimizer
@@ -49,8 +48,7 @@ def train_correspondence_block(root_dir, classes, epochs=10):
     criterion_v = nn.CrossEntropyLoss()
 
     # specify optimizer
-    optimizer = optim.Adam(
-        correspondence_block.parameters(), lr=3e-4, weight_decay=3e-5)
+    optimizer = optim.Adam(correspondence_block.parameters(), lr=3e-4, weight_decay=3e-5)
 
     # training loop
 
@@ -119,6 +117,8 @@ def train_correspondence_block(root_dir, classes, epochs=10):
             print('Validation loss decreased ({:.6f} --> {:.6f}).  Saving model ...'.format(
                 valid_loss_min,
                 valid_loss))
-            torch.save(correspondence_block.state_dict(),
-                       'correspondence_block.pt')
+
+            correspondence_block_filename = os.path.join(train_eval_dir, 'correspondence_block.pt')
+
+            torch.save(correspondence_block.state_dict(), correspondence_block_filename)
             valid_loss_min = valid_loss
