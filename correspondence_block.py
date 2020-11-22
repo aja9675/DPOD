@@ -12,7 +12,8 @@ from torch.utils.data.sampler import SubsetRandomSampler
 
 from dataset_classes import LineMODDataset
 
-def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, batch_size=4, out_path_and_name=None):
+def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, batch_size=4, \
+                                out_path_and_name=None, corr_transfer=None):
 
     train_data = LineMODDataset(root_dir, train_eval_dir, classes=classes,
                                 transform=transforms.Compose([transforms.ToTensor(),
@@ -39,6 +40,11 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
 
     # architecture for correspondence block - 13 objects + backgound = 14 channels for ID masks
     correspondence_block = UNET.UNet(n_channels=3, out_channels_id=14, out_channels_uv=256, bilinear=True)
+
+    if corr_transfer:
+        print("Initializing correspondence block from: %s" % corr_transfer)
+        correspondence_block.load_state_dict(torch.load(corr_transfer, map_location=torch.device('cpu')))
+
     correspondence_block.cuda()
 
     # Using weighted version for class mask as mentioned in the paper

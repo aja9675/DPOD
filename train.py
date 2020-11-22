@@ -31,6 +31,7 @@ parser.add_argument("action", help="path to dir to store training run specific i
 parser.add_argument("--epochs", default=20, type=int, help="correspondence block epochs")
 parser.add_argument("--batch_size", default=4, type=int, help="batch size (default: 4)")
 parser.add_argument("--corr_block_out", help="correspondence block output dir AND filename")
+parser.add_argument("--corr_transfer", help="correspondence block starting weights .pt")
 args = parser.parse_args()
 
 root_dir = args.root_dir
@@ -53,7 +54,7 @@ if action == "train_correspondence":
 	print("Training for %i epochs" % args.epochs)
 	print("------ Started training of the correspondence block ------")
 	train_correspondence_block(root_dir, train_eval_dir, classes, epochs=args.epochs, \
-		batch_size=args.batch_size, out_path_and_name=args.corr_block_out)
+		batch_size=args.batch_size, out_path_and_name=args.corr_block_out, corr_transfer=args.corr_transfer)
 	print("------ Training Finished ------")
 
 if action == "initial_pose_estimation":
