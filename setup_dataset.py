@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 
-from helper import save_obj
+from helper import save_obj, load_obj
 from pose_block import initial_pose_estimation
 from create_renderings import create_refinement_inputs
 from pose_refinement import train_pose_refinement
@@ -35,20 +35,22 @@ root_dir = args.root_dir
 background_dir = args.bgd_dir
 train_eval_dir = args.train_eval_dir
 
+# Pickling this eliminates the need to walk the dir which takes a while, especially
+# on Google Colab when using a mounted drive
 if os.path.exists(os.path.join(root_dir, "all_images_adr.pkl")):
 	print("all_images_adr.pkl found. Assuming GT exists")
 	gt_exists = True
+	list_all_images = load_obj(os.path.join(root_dir, "all_images_adr"))
 else:
 	gt_exists = False
+	list_all_images = []
+	for root, dirs, files in os.walk(root_dir):
+	    for file in files:
+	        if file.endswith(".jpg"):  # images that exist
+	            list_all_images.append(os.path.join(root, file))
 
 if os.path.exists(os.path.join(train_eval_dir, "train_images_indices.pkl")):
 	sys.exit("train_images_indices.pkl found. Nothing to do.")
-
-list_all_images = []
-for root, dirs, files in os.walk(root_dir):
-    for file in files:
-        if file.endswith(".jpg"):  # images that exist
-            list_all_images.append(os.path.join(root, file))
 
 num_images = len(list_all_images)
 indices = list(range(num_images))
