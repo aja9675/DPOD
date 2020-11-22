@@ -12,13 +12,12 @@ from torch.utils.data.sampler import SubsetRandomSampler
 
 from dataset_classes import LineMODDataset
 
-def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10):
+def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, batch_size=4, out_path_and_name=None):
 
     train_data = LineMODDataset(root_dir, train_eval_dir, classes=classes,
                                 transform=transforms.Compose([transforms.ToTensor(),
                                 transforms.ColorJitter(brightness=0, contrast=0, saturation=0, hue=0)]))
 
-    batch_size = 4
     num_workers = 0
     valid_size = 0.2
     # obtain training indices that will be used for validation
@@ -66,11 +65,14 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10):
         ###################
         # train the model #
         ###################
+        batch_cnt = 0
         correspondence_block.train()
         for _, image, idmask, umask, vmask in train_loader:
+            if batch_cnt % 100 == 0:
+                print("Batch %i/%i finished!" % (batch_cnt, len(train_idx)/batch_size))
+
             # move tensors to GPU if CUDA is available
-            image, idmask, umask, vmask = image.cuda(
-            ), idmask.cuda(), umask.cuda(), vmask.cuda()
+            image, idmask, umask, vmask = image.cuda(), idmask.cuda(), umask.cuda(), vmask.cuda()
             # clear the gradients of all optimized variables
             optimizer.zero_grad()
             # forward pass: compute predicted outputs by passing inputs to the model
@@ -86,11 +88,15 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10):
             optimizer.step()
             # update training loss
             train_loss += loss.item()
+            batch_cnt += 1
         ######################
         # validate the model #
         ######################
         correspondence_block.eval()
+        batch_cnt = 0
         for _, image, idmask, umask, vmask in valid_loader:
+            if batch_cnt % 100 == 0:
+                print("Batch %i/%i finished!" % (batch_cnt, len(valid_idx)/batch_size))
             # move tensors to GPU if CUDA is available
             image, idmask, umask, vmask = image.cuda(
             ), idmask.cuda(), umask.cuda(), vmask.cuda()
@@ -103,6 +109,7 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10):
             loss = loss_id + loss_u + loss_v
             # update average validation loss
             valid_loss += loss.item()
+            batch_cnt += 1
 
         # calculate average losses
         train_loss = train_loss/len(train_loader.sampler)
@@ -118,7 +125,10 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10):
                 valid_loss_min,
                 valid_loss))
 
-            correspondence_block_filename = os.path.join(train_eval_dir, 'correspondence_block.pt')
+            if not out_path_and_name:
+                correspondence_block_filename = os.path.join(train_eval_dir, 'correspondence_block.pt')
+            else:
+                correspondence_block_filename = out_path_and_name
 
             torch.save(correspondence_block.state_dict(), correspondence_block_filename)
             valid_loss_min = valid_loss

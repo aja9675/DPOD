@@ -42,8 +42,7 @@ else:
 	gt_exists = False
 
 if os.path.exists(os.path.join(train_eval_dir, "train_images_indices.pkl")):
-	#sys.exit("train_images_indices.pkl found. Nothing to do.")
-	pass
+	sys.exit("train_images_indices.pkl found. Nothing to do.")
 
 list_all_images = []
 for root, dirs, files in os.walk(root_dir):

@@ -28,14 +28,15 @@ parser = argparse.ArgumentParser(
 parser.add_argument("root_dir", help="path to dataset directory (LineMOD_Dataset)")
 parser.add_argument("train_eval_dir", help="path to dir to store training run specific info")
 parser.add_argument("action", help="path to dir to store training run specific info", choices=list_of_actions)
-parser.add_argument("--epochs", default=20, help="correspondence block epochs")
+parser.add_argument("--epochs", default=20, type=int, help="correspondence block epochs")
+parser.add_argument("--batch_size", default=4, type=int, help="batch size (default: 4)")
+parser.add_argument("--corr_block_out", help="correspondence block output dir AND filename")
 args = parser.parse_args()
 
 root_dir = args.root_dir
 train_eval_dir = args.train_eval_dir
 action = args.action
 print("Action: %s" % action)
-epochs = int(args.epochs)
 
 # Check we at least have the dirs we're expecting
 check_dataset_dir_structure(root_dir, train_eval_dir, classes)
@@ -49,9 +50,10 @@ intrinsic_matrix = np.array([[fx, 0, px], [0, fy, py], [0, 0, 1]])
 
 
 if action == "train_correspondence":
-	print("Training for %i epochs" % epochs)
+	print("Training for %i epochs" % args.epochs)
 	print("------ Started training of the correspondence block ------")
-	train_correspondence_block(root_dir, train_eval_dir, classes, epochs=epochs)
+	train_correspondence_block(root_dir, train_eval_dir, classes, epochs=args.epochs, \
+		batch_size=args.batch_size, out_path_and_name=args.corr_block_out)
 	print("------ Training Finished ------")
 
 if action == "initial_pose_estimation":
