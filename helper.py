@@ -111,7 +111,12 @@ def ADD_score(pt_cld, true_pose, pred_pose, diameter):
     #pred_pose[:, 3][np.isnan(pred_pose[:, 3])] = 0
     target = pt_cld @ true_pose[0:3, 0:3] + np.array([true_pose[0, 3], true_pose[1, 3], true_pose[2, 3]])
     output = pt_cld @ pred_pose[0:3, 0:3] + np.array([pred_pose[0, 3], pred_pose[1, 3], pred_pose[2, 3]])
-    avg_distance = (np.linalg.norm(output - target)) / pt_cld.shape[0]
+
+    # This was a bug in the original contributor's implementation. This gives ~56% accuracy, where as
+    # actual results are no where near that. Running the correspondence block only gives 0% accuracy.
+    #avg_distance = (np.linalg.norm(output - target)) / pt_cld.shape[0]
+    avg_distance = np.sum(np.linalg.norm(output - target, axis=1)) / pt_cld.shape[0]
+
     print("avg_distance %f: " % avg_distance)
     threshold = diameter * 0.1
     print("threshold %f: " % threshold)
