@@ -41,8 +41,14 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
     correspondence_block = UNET.UNet(n_channels=3, out_channels_id=14, out_channels_uv=256, bilinear=True)
     correspondence_block.cuda()
 
+    # Using weighted version for class mask as mentioned in the paper
+    # However, not sure what the weighting is, so taking a guess
+    # Note we don't need to normalize when using the default 'reduction' arg
+    class_weights = np.ones(len(classes)+1) # +1 for background
+    class_weights[-1] = 0.1
+
     # custom loss function and optimizer
-    criterion_id = nn.CrossEntropyLoss()
+    criterion_id = nn.CrossEntropyLoss(torch.tensor(class_weights, dtype=torch.float32).cuda())
     criterion_u = nn.CrossEntropyLoss()
     criterion_v = nn.CrossEntropyLoss()
 
