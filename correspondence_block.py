@@ -12,6 +12,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 
 from dataset_classes import LineMODDataset
 
+
 def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, batch_size=4, \
                                 out_path_and_name=None, corr_transfer=None):
 
@@ -47,14 +48,18 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
 
     correspondence_block.cuda()
 
-    # Using weighted version for class mask as mentioned in the paper
-    # However, not sure what the weighting is, so taking a guess
-    # Note we don't need to normalize when using the default 'reduction' arg
-    class_weights = np.ones(len(classes)+1) # +1 for background
-    class_weights[-1] = 0.1
-
     # custom loss function and optimizer
-    criterion_id = nn.CrossEntropyLoss(torch.tensor(class_weights, dtype=torch.float32).cuda())
+    weight_classes = True
+    if weight_classes:
+        # Using weighted version for class mask as mentioned in the paper
+        # However, not sure what the weighting is, so taking a guess
+        # Note we don't need to normalize when using the default 'reduction' arg
+        class_weights = np.ones(len(classes)+1) # +1 for background
+        class_weights[0] = 0.1
+        criterion_id = nn.CrossEntropyLoss(torch.tensor(class_weights, dtype=torch.float32).cuda())
+    else:
+        criterion_id = nn.CrossEntropyLoss()
+
     criterion_u = nn.CrossEntropyLoss()
     criterion_v = nn.CrossEntropyLoss()
 
@@ -66,13 +71,19 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
     # number of epochs to train the model
     n_epochs = epochs
 
-    valid_loss_min = np.Inf  # track change in validation loss
+    # track change in validation loss
+    # TODO - if transfer learning, don't assume infinity here, run validation once first
+    valid_loss_min = np.Inf
 
     for epoch in range(1, n_epochs+1):
         # keep track of training and validation loss
         train_loss = 0.0
         valid_loss = 0.0
+        train_idmask_loss = train_umask_loss = train_vmask_loss = 0.0
+        valid_idmask_loss = valid_umask_loss = valid_vmask_loss = 0.0
+
         print("------ Epoch ", epoch, " ---------")
+        print("Training...")
 
         ###################
         # train the model #
@@ -93,17 +104,21 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
             loss_id = criterion_id(idmask_pred, idmask)
             loss_u = criterion_u(umask_pred, umask)
             loss_v = criterion_v(vmask_pred, vmask)
-            loss = loss_id + loss_u + loss_v
+            total_loss = loss_id + loss_u + loss_v
             # backward pass: compute gradient of the loss with respect to model parameters
-            loss.backward()
+            total_loss.backward()
             # perform a single optimization step (parameter update)
             optimizer.step()
             # update training loss
-            train_loss += loss.item()
+            train_idmask_loss += loss_id.item()
+            train_umask_loss += loss_u.item()
+            train_vmask_loss += loss_v.item()
+            train_loss += total_loss.item()
             batch_cnt += 1
         ######################
         # validate the model #
         ######################
+        print("Validating...")
         correspondence_block.eval()
         batch_cnt = 0
         for _, image, idmask, umask, vmask in valid_loader:
@@ -118,24 +133,39 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
             loss_id = criterion_id(idmask_pred, idmask)
             loss_u = criterion_u(umask_pred, umask)
             loss_v = criterion_v(vmask_pred, vmask)
-            loss = loss_id + loss_u + loss_v
+            total_loss = loss_id + loss_u + loss_v
             # update average validation loss
-            valid_loss += loss.item()
+            valid_idmask_loss += loss_id.item()
+            valid_umask_loss += loss_u.item()
+            valid_vmask_loss += loss_v.item()
+            valid_loss += total_loss.item()
             batch_cnt += 1
 
         # calculate average losses
         train_loss = train_loss/len(train_loader.sampler)
+        train_idmask_loss = train_idmask_loss/len(train_loader.sampler)
+        train_umask_loss = train_umask_loss/len(train_loader.sampler)
+        train_vmask_loss = train_vmask_loss/len(train_loader.sampler)
+
         valid_loss = valid_loss/len(valid_loader.sampler)
+        valid_idmask_loss = valid_idmask_loss/len(valid_loader.sampler)
+        valid_umask_loss = valid_umask_loss/len(valid_loader.sampler)
+        valid_vmask_loss = valid_vmask_loss/len(valid_loader.sampler)
 
         # print training/validation statistics
         print('Epoch: {} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f}'.format(
             epoch, train_loss, valid_loss))
+        print('Train IDMask loss: %.6f \tUMask loss: %.3f \tUMask loss: %.3f' % \
+            (train_idmask_loss, train_umask_loss, train_vmask_loss))
+        print('Valid IDMask loss: %.6f \tUMask loss: %.3f \tUMask loss: %.3f' % \
+            (valid_idmask_loss, valid_umask_loss, valid_vmask_loss))
+
+        # TODO - monitor for train/val divergence and stop
 
         # save model if validation loss has decreased
         if valid_loss <= valid_loss_min:
             print('Validation loss decreased ({:.6f} --> {:.6f}).  Saving model ...'.format(
-                valid_loss_min,
-                valid_loss))
+                valid_loss_min, valid_loss))
 
             if not out_path_and_name:
                 correspondence_block_filename = os.path.join(train_eval_dir, 'correspondence_block.pt')
