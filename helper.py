@@ -81,6 +81,42 @@ def create_bounding_box(img, pose, pt_cld_data, intrinsic_matrix,color=(0,0,255)
     return img
 
 
+def color_linemod_idmask_img(img):
+    color_img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    colors_LUT = np.array([[[0,0,0] for i in range(256)]],dtype=np.uint8)
+
+    colors_LUT[0][1] = (0,0,90)        # ape
+    colors_LUT[0][2] = (215,0,0)       # benchviseblue
+    colors_LUT[0][3] = (155,155,155)   # cam
+    colors_LUT[0][4] = (200,200,200)   # watering can
+    colors_LUT[0][5] = (215,215,255)   # cat
+    colors_LUT[0][6] = (0,90,0)        # driller
+    colors_LUT[0][7] = (0,255,255)     # duck
+    colors_LUT[0][8] = (90,90,90)      # eggbox
+    colors_LUT[0][9] = (227,162,184)   # glue
+    colors_LUT[0][10] = (90,0,0)       # holepuncher
+    colors_LUT[0][11] = (255,255,175)  # iron
+    colors_LUT[0][12] = (255,255,255)  # lamp
+    colors_LUT[0][13] = (50,30,30)     # phone
+
+    return cv2.LUT(color_img, colors_LUT)
+
+
+# Using BGR format and encoding U to G and V to B
+def color_uv(umask, vmask):
+    assert(umask.shape == vmask.shape)
+    #ulut = np.array([[[i,255-i,0] for i in range(256)]],dtype=np.uint8)
+    #vlut = np.array([[[0,255-i,i] for i in range(256)]],dtype=np.uint8)
+
+    # Initialize color_img (G channel to U values)
+    color_img = cv2.cvtColor(umask, cv2.COLOR_GRAY2BGR)
+    # B channel to V values
+    color_img[:,:,0] = vmask
+    # Zero out R channel
+    color_img[:,:,2] = 0
+
+    return color_img
+
 def draw_axis(img, pose, intrinsic_matrix, colors=[(0,0,255), (0,255,0), (255,0,0)], axis_len=10):
     # If only one color is specified
     if np.shape(colors) != (3,3):
@@ -104,11 +140,51 @@ def draw_axis(img, pose, intrinsic_matrix, colors=[(0,0,255), (0,255,0), (255,0,
     return img
 
 
-def ADD_score(pt_cld, true_pose, pred_pose, diameter):
-    "Evaluation metric - ADD score"
+#def ADD_score(pt_cld, true_pose, pred_pose, diameter):
+def draw_point_cloud(img, pose, pt_cld, intrinsic_matrix, color=(0,0,255)):
+    pts_3d = np.float32(pt_cld[::10]) # Add some sparsity
+    pts, jac = cv2.projectPoints(pts_3d, pose[0:3, 0:3], pose[:,3], intrinsic_matrix, None)
+    pts = np.int32(np.squeeze(pts))
+    for pt in pts:
+        img = cv2.circle(img, (pt[0],pt[1]), 1, (0,0,255), 1)
+    return img
+
+#Evaluation metric - ADD score
+def ADD_vis(img, pt_cld, true_pose, pred_pose, intrinsic_matrix):
+
+    target_pt_cld = pt_cld @ true_pose[0:3, 0:3] + np.array([true_pose[0, 3], true_pose[1, 3], true_pose[2, 3]])
+    output_pt_cld = pt_cld @ pred_pose[0:3, 0:3] + np.array([pred_pose[0, 3], pred_pose[1, 3], pred_pose[2, 3]])
+    assert(len(target_pt_cld) == len(output_pt_cld))
+
+    zero_rot = np.eye(3)
+    zero_trans = np.float32([0,0,0])
+    target_pts, jac = cv2.projectPoints(target_pt_cld, zero_rot, zero_trans, intrinsic_matrix, None)
+    output_pts, jac = cv2.projectPoints(output_pt_cld, zero_rot, zero_trans, intrinsic_matrix, None)
+
+    target_pts = np.int32(np.squeeze(target_pts))
+    for pt in target_pts[::10]:
+        img = cv2.circle(img, (pt[0],pt[1]), 1, (0,255,0), 1)
+
+    output_pts = np.int32(np.squeeze(output_pts))
+    for pt in output_pts[::10]:
+        img = cv2.circle(img, (pt[0],pt[1]), 1, (0,0,255), 1)
+
+    #target_pt_cld = target_pt_cld + np.array([true_pose[0, 3], true_pose[1, 3], true_pose[2, 3]])
+    #output_pt_cld = output_pt_cld + np.array([pred_pose[0, 3], pred_pose[1, 3], pred_pose[2, 3]])
+    #print(pt_cld.shape)
+    #avg_distance = (np.linalg.norm(output_pt_cld - target_pt_cld)) / pt_cld.shape[0]
+    avg_distance = np.sum(np.linalg.norm(output_pt_cld - target_pt_cld, axis=1)) / pt_cld.shape[0]
+    #print("avg_distance %f: " % avg_distance)
+
+    return img
+
+
+#Evaluation metric - ADD score
+def ADD_score(pt_cld, true_pose, pred_pose, diameter_threshold):
+    # Shouldn't be doing the following 2 lines:
     #pred_pose[0:3, 0:3][np.isnan(pred_pose[0:3, 0:3])] = 1
-    # The following is cheating...
     #pred_pose[:, 3][np.isnan(pred_pose[:, 3])] = 0
+
     target = pt_cld @ true_pose[0:3, 0:3] + np.array([true_pose[0, 3], true_pose[1, 3], true_pose[2, 3]])
     output = pt_cld @ pred_pose[0:3, 0:3] + np.array([pred_pose[0, 3], pred_pose[1, 3], pred_pose[2, 3]])
 
@@ -117,18 +193,7 @@ def ADD_score(pt_cld, true_pose, pred_pose, diameter):
     #avg_distance = (np.linalg.norm(output - target)) / pt_cld.shape[0]
     avg_distance = np.sum(np.linalg.norm(output - target, axis=1)) / pt_cld.shape[0]
 
-    print("avg_distance %f: " % avg_distance)
-    threshold = diameter * 0.1
-    print("threshold %f: " % threshold)
-
-    # Draw the pointcloud
-    for pt in target:
-        img = cv2.circle(full_img, (pt[0],pt[1]), 5, (0,0,255), 1)
-
-    if avg_distance <= threshold:
-        return 1
+    if avg_distance <= diameter_threshold:
+        return 1, avg_distance
     else:
-        return 0
-
-
-
+        return 0, avg_distance
