@@ -49,13 +49,13 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
     correspondence_block.cuda()
 
     # custom loss function and optimizer
-    weight_classes = True
+    weight_classes = False
     if weight_classes:
         # Using weighted version for class mask as mentioned in the paper
         # However, not sure what the weighting is, so taking a guess
         # Note we don't need to normalize when using the default 'reduction' arg
         class_weights = np.ones(len(classes)+1) # +1 for background
-        class_weights[0] = 0.1
+        class_weights[0] = 0.5
         criterion_id = nn.CrossEntropyLoss(torch.tensor(class_weights, dtype=torch.float32).cuda())
     else:
         criterion_id = nn.CrossEntropyLoss()
@@ -121,25 +121,26 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
         print("Validating...")
         correspondence_block.eval()
         batch_cnt = 0
-        for _, image, idmask, umask, vmask in valid_loader:
-            if batch_cnt % 100 == 0:
-                print("Batch %i/%i finished!" % (batch_cnt, len(valid_idx)/batch_size))
-            # move tensors to GPU if CUDA is available
-            image, idmask, umask, vmask = image.cuda(
-            ), idmask.cuda(), umask.cuda(), vmask.cuda()
-            # forward pass: compute predicted outputs by passing inputs to the model
-            idmask_pred, umask_pred, vmask_pred = correspondence_block(image)
-            # calculate the batch loss
-            loss_id = criterion_id(idmask_pred, idmask)
-            loss_u = criterion_u(umask_pred, umask)
-            loss_v = criterion_v(vmask_pred, vmask)
-            total_loss = loss_id + loss_u + loss_v
-            # update average validation loss
-            valid_idmask_loss += loss_id.item()
-            valid_umask_loss += loss_u.item()
-            valid_vmask_loss += loss_v.item()
-            valid_loss += total_loss.item()
-            batch_cnt += 1
+        with torch.no_grad(): # This is critical to limit GPU memory use
+            for _, image, idmask, umask, vmask in valid_loader:
+                if batch_cnt % 100 == 0:
+                    print("Batch %i/%i finished!" % (batch_cnt, len(valid_idx)/batch_size))
+                # move tensors to GPU if CUDA is available
+                image, idmask, umask, vmask = image.cuda(
+                ), idmask.cuda(), umask.cuda(), vmask.cuda()
+                # forward pass: compute predicted outputs by passing inputs to the model
+                idmask_pred, umask_pred, vmask_pred = correspondence_block(image)
+                # calculate the batch loss
+                loss_id = criterion_id(idmask_pred, idmask)
+                loss_u = criterion_u(umask_pred, umask)
+                loss_v = criterion_v(vmask_pred, vmask)
+                total_loss = loss_id + loss_u + loss_v
+                # update average validation loss
+                valid_idmask_loss += loss_id.item()
+                valid_umask_loss += loss_u.item()
+                valid_vmask_loss += loss_v.item()
+                valid_loss += total_loss.item()
+                batch_cnt += 1
 
         # calculate average losses
         train_loss = train_loss/len(train_loader.sampler)

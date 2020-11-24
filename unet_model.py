@@ -152,4 +152,4 @@ class UNet(nn.Module):
         x_v = self.up4_v(x_v)
         logits_v = self.outc_v4(x_v)
         
-        return logits_id,logits_u, logits_v
+        return logits_id, logits_u, logits_v
