@@ -76,11 +76,10 @@ class OutConv(nn.Module):
         return self.conv(x)
         
 class UNet(nn.Module):
-    def __init__(self, n_channels = 3, out_channels_id = 14, out_channels_uv = 256, bilinear=True):
+    def __init__(self, n_channels = 3, out_channels_id = 14, bilinear=True):
         super(UNet, self).__init__()
         self.n_channels = n_channels
         self.out_channels_id = out_channels_id
-        self.out_channels_uv = out_channels_uv
         self.bilinear = bilinear
 
         self.inc = DoubleConv(n_channels, 64)
@@ -90,33 +89,12 @@ class UNet(nn.Module):
         factor = 2 if bilinear else 1
         self.down4 = Down(512, 1024//factor)
 
-
         #ID MASK
         self.up1_id = Up(1024, 512, bilinear)
         self.up2_id = Up(512, 256, bilinear)
         self.up3_id = Up(256, 128, bilinear)
         self.up4_id = Up(128, 64 * factor, bilinear)
         self.outc_id = OutConv(64, out_channels_id)
-
-        #U Mask
-        self.up1_u = Up(1024, 512, bilinear)
-        self.up2_u = Up(512,512,bilinear)
-        self.outc_u1 = OutConv(256, out_channels_uv)
-        self.outc_u2 = OutConv(256, out_channels_uv)
-        self.outc_u3 = OutConv(256, out_channels_uv)
-        self.outc_u4 = OutConv(256, out_channels_uv)
-        self.up3_u = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-        self.up4_u = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-
-        #V Mask
-        self.up1_v = Up(1024, 512, bilinear)
-        self.up2_v = Up(512,512,bilinear)
-        self.outc_v1 = OutConv(256, out_channels_uv)
-        self.outc_v2 = OutConv(256, out_channels_uv)
-        self.outc_v3 = OutConv(256, out_channels_uv)
-        self.outc_v4 = OutConv(256, out_channels_uv)
-        self.up3_v = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-        self.up4_v = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
 
     def forward(self, x):
         x1 = self.inc(x)
@@ -132,24 +110,4 @@ class UNet(nn.Module):
         x_id = self.up4_id(x_id, x1)
         logits_id = self.outc_id(x_id)
 
-        # U mask
-        x_u = self.up1_u(x5, x4)
-        x_u = self.up2_u(x_u,x3)
-        x_u = self.outc_u1(x_u)
-        x_u = self.outc_u2(x_u)
-        x_u = self.outc_u3(x_u)
-        x_u = self.up3_u(x_u)
-        x_u = self.up4_u(x_u)
-        logits_u = self.outc_u4(x_u)
-
-        # V mask
-        x_v = self.up1_v(x5, x4)
-        x_v = self.up2_v(x_v,x3)
-        x_v = self.outc_v1(x_v)
-        x_v = self.outc_v2(x_v)
-        x_v = self.outc_v3(x_v)
-        x_v = self.up3_v(x_v)
-        x_v = self.up4_v(x_v)
-        logits_v = self.outc_v4(x_v)
-        
-        return logits_id, logits_u, logits_v
+        return logits_id

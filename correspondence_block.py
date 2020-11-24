@@ -40,7 +40,7 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
                                                sampler=valid_sampler, num_workers=num_workers)
 
     # architecture for correspondence block - 13 objects + backgound = 14 channels for ID masks
-    correspondence_block = UNET.UNet(n_channels=3, out_channels_id=14, out_channels_uv=256, bilinear=True)
+    correspondence_block = UNET.UNet(n_channels=3, out_channels_id=14, bilinear=True)
 
     if corr_transfer:
         print("Initializing correspondence block from: %s" % corr_transfer)
@@ -49,7 +49,7 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
     correspondence_block.cuda()
 
     # custom loss function and optimizer
-    weight_classes = False
+    weight_classes = True
     if weight_classes:
         # Using weighted version for class mask as mentioned in the paper
         # However, not sure what the weighting is, so taking a guess
@@ -59,9 +59,6 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
         criterion_id = nn.CrossEntropyLoss(torch.tensor(class_weights, dtype=torch.float32).cuda())
     else:
         criterion_id = nn.CrossEntropyLoss()
-
-    criterion_u = nn.CrossEntropyLoss()
-    criterion_v = nn.CrossEntropyLoss()
 
     # specify optimizer
     optimizer = optim.Adam(correspondence_block.parameters(), lr=3e-4, weight_decay=3e-5)
@@ -79,8 +76,8 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
         # keep track of training and validation loss
         train_loss = 0.0
         valid_loss = 0.0
-        train_idmask_loss = train_umask_loss = train_vmask_loss = 0.0
-        valid_idmask_loss = valid_umask_loss = valid_vmask_loss = 0.0
+        train_idmask_loss = 0.0
+        valid_idmask_loss = 0.0
 
         print("------ Epoch ", epoch, " ---------")
         print("Training...")
@@ -95,24 +92,20 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
                 print("Batch %i/%i finished!" % (batch_cnt, len(train_idx)/batch_size))
 
             # move tensors to GPU if CUDA is available
-            image, idmask, umask, vmask = image.cuda(), idmask.cuda(), umask.cuda(), vmask.cuda()
+            image, idmask = image.cuda(), idmask.cuda()
             # clear the gradients of all optimized variables
             optimizer.zero_grad()
             # forward pass: compute predicted outputs by passing inputs to the model
-            idmask_pred, umask_pred, vmask_pred = correspondence_block(image)
+            idmask_pred = correspondence_block(image)
             # calculate the batch loss
             loss_id = criterion_id(idmask_pred, idmask)
-            loss_u = criterion_u(umask_pred, umask)
-            loss_v = criterion_v(vmask_pred, vmask)
-            total_loss = loss_id + loss_u + loss_v
+            total_loss = loss_id
             # backward pass: compute gradient of the loss with respect to model parameters
             total_loss.backward()
             # perform a single optimization step (parameter update)
             optimizer.step()
             # update training loss
             train_idmask_loss += loss_id.item()
-            train_umask_loss += loss_u.item()
-            train_vmask_loss += loss_v.item()
             train_loss += total_loss.item()
             batch_cnt += 1
         ######################
@@ -126,40 +119,29 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
                 if batch_cnt % 100 == 0:
                     print("Batch %i/%i finished!" % (batch_cnt, len(valid_idx)/batch_size))
                 # move tensors to GPU if CUDA is available
-                image, idmask, umask, vmask = image.cuda(
-                ), idmask.cuda(), umask.cuda(), vmask.cuda()
+                image, idmask = image.cuda(), idmask.cuda()
                 # forward pass: compute predicted outputs by passing inputs to the model
-                idmask_pred, umask_pred, vmask_pred = correspondence_block(image)
+                idmask_pred = correspondence_block(image)
                 # calculate the batch loss
                 loss_id = criterion_id(idmask_pred, idmask)
-                loss_u = criterion_u(umask_pred, umask)
-                loss_v = criterion_v(vmask_pred, vmask)
-                total_loss = loss_id + loss_u + loss_v
+                total_loss = loss_id
                 # update average validation loss
                 valid_idmask_loss += loss_id.item()
-                valid_umask_loss += loss_u.item()
-                valid_vmask_loss += loss_v.item()
                 valid_loss += total_loss.item()
                 batch_cnt += 1
 
         # calculate average losses
         train_loss = train_loss/len(train_loader.sampler)
         train_idmask_loss = train_idmask_loss/len(train_loader.sampler)
-        train_umask_loss = train_umask_loss/len(train_loader.sampler)
-        train_vmask_loss = train_vmask_loss/len(train_loader.sampler)
 
         valid_loss = valid_loss/len(valid_loader.sampler)
         valid_idmask_loss = valid_idmask_loss/len(valid_loader.sampler)
-        valid_umask_loss = valid_umask_loss/len(valid_loader.sampler)
-        valid_vmask_loss = valid_vmask_loss/len(valid_loader.sampler)
 
         # print training/validation statistics
         print('Epoch: {} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f}'.format(
             epoch, train_loss, valid_loss))
-        print('Train IDMask loss: %.6f \tUMask loss: %.3f \tUMask loss: %.3f' % \
-            (train_idmask_loss, train_umask_loss, train_vmask_loss))
-        print('Valid IDMask loss: %.6f \tUMask loss: %.3f \tUMask loss: %.3f' % \
-            (valid_idmask_loss, valid_umask_loss, valid_vmask_loss))
+        print('Train IDMask loss: %.6f' % (train_idmask_loss))
+        print('Valid IDMask loss: %.6f' % (valid_idmask_loss))
 
         # TODO - monitor for train/val divergence and stop
 
