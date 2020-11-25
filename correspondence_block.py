@@ -1,4 +1,4 @@
-import os
+import sys, os
 import cv2
 import torch
 import numpy as np
@@ -62,6 +62,7 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
 
     # specify optimizer
     optimizer = optim.Adam(correspondence_block.parameters(), lr=3e-4, weight_decay=3e-5)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=2)
 
     # training loop
 
@@ -76,8 +77,6 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
         # keep track of training and validation loss
         train_loss = 0.0
         valid_loss = 0.0
-        train_idmask_loss = 0.0
-        valid_idmask_loss = 0.0
 
         print("------ Epoch ", epoch, " ---------")
         print("Training...")
@@ -87,7 +86,13 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
         ###################
         batch_cnt = 0
         correspondence_block.train()
-        for _, image, idmask, umask, vmask in train_loader:
+        for img_adr, image, idmask, umask, vmask in train_loader:
+
+            assert image.shape[1] == correspondence_block.n_channels, \
+                    f'Network has been defined with {correspondence_block.n_channels} input channels, ' \
+                    f'but loaded images have {image.shape[1]} channels. Please check that ' \
+                    'the images are loaded correctly.'
+
             if batch_cnt % 100 == 0:
                 print("Batch %i/%i finished!" % (batch_cnt, len(train_idx)/batch_size))
 
@@ -105,7 +110,6 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
             # perform a single optimization step (parameter update)
             optimizer.step()
             # update training loss
-            train_idmask_loss += loss_id.item()
             train_loss += total_loss.item()
             batch_cnt += 1
         ######################
@@ -115,7 +119,7 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
         correspondence_block.eval()
         batch_cnt = 0
         with torch.no_grad(): # This is critical to limit GPU memory use
-            for _, image, idmask, umask, vmask in valid_loader:
+            for img_adr, image, idmask, umask, vmask in valid_loader:
                 if batch_cnt % 100 == 0:
                     print("Batch %i/%i finished!" % (batch_cnt, len(valid_idx)/batch_size))
                 # move tensors to GPU if CUDA is available
@@ -126,22 +130,19 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
                 loss_id = criterion_id(idmask_pred, idmask)
                 total_loss = loss_id
                 # update average validation loss
-                valid_idmask_loss += loss_id.item()
                 valid_loss += total_loss.item()
                 batch_cnt += 1
 
         # calculate average losses
         train_loss = train_loss/len(train_loader.sampler)
-        train_idmask_loss = train_idmask_loss/len(train_loader.sampler)
 
         valid_loss = valid_loss/len(valid_loader.sampler)
-        valid_idmask_loss = valid_idmask_loss/len(valid_loader.sampler)
 
         # print training/validation statistics
         print('Epoch: {} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f}'.format(
             epoch, train_loss, valid_loss))
-        print('Train IDMask loss: %.6f' % (train_idmask_loss))
-        print('Valid IDMask loss: %.6f' % (valid_idmask_loss))
+
+        scheduler.step(valid_loss)
 
         # TODO - monitor for train/val divergence and stop
 
