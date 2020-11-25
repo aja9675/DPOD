@@ -1,4 +1,4 @@
-import os
+import sys, os
 import cv2
 import torch
 import numpy as np
@@ -65,6 +65,7 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
 
     # specify optimizer
     optimizer = optim.Adam(correspondence_block.parameters(), lr=3e-4, weight_decay=3e-5)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=2)
 
     # training loop
 
@@ -90,7 +91,13 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
         ###################
         batch_cnt = 0
         correspondence_block.train()
-        for _, image, idmask, umask, vmask in train_loader:
+        for img_adr, image, idmask, umask, vmask in train_loader:
+
+            assert image.shape[1] == correspondence_block.n_channels, \
+                    f'Network has been defined with {correspondence_block.n_channels} input channels, ' \
+                    f'but loaded images have {image.shape[1]} channels. Please check that ' \
+                    'the images are loaded correctly.'
+
             if batch_cnt % 100 == 0:
                 print("Batch %i/%i finished!" % (batch_cnt, len(train_idx)/batch_size))
 
@@ -122,7 +129,7 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
         correspondence_block.eval()
         batch_cnt = 0
         with torch.no_grad(): # This is critical to limit GPU memory use
-            for _, image, idmask, umask, vmask in valid_loader:
+            for img_adr, image, idmask, umask, vmask in valid_loader:
                 if batch_cnt % 100 == 0:
                     print("Batch %i/%i finished!" % (batch_cnt, len(valid_idx)/batch_size))
                 # move tensors to GPU if CUDA is available
@@ -160,6 +167,8 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
             (train_idmask_loss, train_umask_loss, train_vmask_loss))
         print('Valid IDMask loss: %.6f \tUMask loss: %.3f \tUMask loss: %.3f' % \
             (valid_idmask_loss, valid_umask_loss, valid_vmask_loss))
+
+        scheduler.step(valid_loss)
 
         # TODO - monitor for train/val divergence and stop
 
