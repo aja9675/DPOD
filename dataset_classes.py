@@ -9,7 +9,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 from torch.utils.data.sampler import SubsetRandomSampler
 from create_ground_truth import *
-from helper import load_obj
+from helper import *
 
 
 class LineMODDataset(Dataset):
@@ -38,7 +38,8 @@ class LineMODDataset(Dataset):
         regex = re.compile(r'\d+')
         idx = regex.findall(os.path.split(img_adr)[1])[0]
         
-        if i % 100 != 0:  # read the image with changed background
+        #if i % 100 != 0:  # read the image with changed background
+        if i % 2 != 0:  # read the image with changed background
             #print("Changed background %s" % os.path.join(self.root_dir, label + "/changed_background/color" + str(idx) + ".png"))
             image = cv2.imread(os.path.join(self.root_dir, label + "/changed_background/color" + str(idx) + ".png"))
         else:
