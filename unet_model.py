@@ -48,7 +48,7 @@ class Up(nn.Module):
         # if bilinear, use the normal convolutions to reduce the number of channels
         if bilinear:
             self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-            self.conv = DoubleConv(in_channels, out_channels // 2, in_channels // 2)
+            self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
         else:
             self.up = nn.ConvTranspose2d(in_channels , in_channels // 2, kernel_size=2, stride=2)
             self.conv = DoubleConv(in_channels, out_channels)
@@ -57,12 +57,14 @@ class Up(nn.Module):
     def forward(self, x1, x2):
         x1 = self.up(x1)
         # input is CHW
-        diffY = torch.tensor([x2.size()[2] - x1.size()[2]])
-        diffX = torch.tensor([x2.size()[3] - x1.size()[3]])
+        diffY = x2.size()[2] - x1.size()[2]
+        diffX = x2.size()[3] - x1.size()[3]
 
         x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
                         diffY // 2, diffY - diffY // 2])
-
+        # if you have padding issues, see
+        # https://github.com/HaiyongJiang/U-Net-Pytorch-Unstructured-Buggy/commit/0e854509c2cea854e247a9c615f175f76fbb2e3a
+        # https://github.com/xiaopeng-liao/Pytorch-UNet/commit/8ebac70e633bac59fc22bb5195e513d5832fb3bd
         x = torch.cat([x2, x1], dim=1)
         return self.conv(x)
 
@@ -74,7 +76,7 @@ class OutConv(nn.Module):
 
     def forward(self, x):
         return self.conv(x)
-        
+
 class UNet(nn.Module):
     def __init__(self, n_channels = 3, out_channels_id = 14, out_channels_uv = 256, bilinear=True):
         super(UNet, self).__init__()
@@ -92,10 +94,10 @@ class UNet(nn.Module):
 
 
         #ID MASK
-        self.up1_id = Up(1024, 512, bilinear)
-        self.up2_id = Up(512, 256, bilinear)
-        self.up3_id = Up(256, 128, bilinear)
-        self.up4_id = Up(128, 64 * factor, bilinear)
+        self.up1_id = Up(1024, 512 // factor, bilinear)
+        self.up2_id = Up(512, 256 // factor, bilinear)
+        self.up3_id = Up(256, 128 // factor, bilinear)
+        self.up4_id = Up(128, 64, bilinear)
         self.outc_id = OutConv(64, out_channels_id)
 
         #U Mask
