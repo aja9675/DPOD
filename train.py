@@ -7,8 +7,6 @@ import cv2
 import pickle
 import argparse
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
 
 from helper import save_obj
 from pose_block import initial_pose_estimation

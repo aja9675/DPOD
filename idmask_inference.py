@@ -10,8 +10,6 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 import unet_model as UNET
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
 from copy import deepcopy
 import time
 
