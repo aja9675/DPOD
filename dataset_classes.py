@@ -54,7 +54,9 @@ class LineMODDataset(Dataset):
         try:
             # resize the masks
             image = cv2.resize(image, (image.shape[1]//2, image.shape[0]//2), interpolation=cv2.INTER_AREA)
-            IDmask = cv2.resize(IDmask, (IDmask.shape[1]//2, IDmask.shape[0]//2), interpolation=cv2.INTER_AREA)
+            # Can't use any interpolation for IDmask or we'll change the class ID!!
+            IDmask = cv2.resize(IDmask, (IDmask.shape[1]//2, IDmask.shape[0]//2), interpolation=cv2.INTER_NEAREST)
+            # And not sure if it's a good idea whether or not to do it on the UV masks
             Umask = cv2.resize(Umask, (Umask.shape[1]//2, Umask.shape[0]//2), interpolation=cv2.INTER_AREA)
             Vmask = cv2.resize(Vmask, (Vmask.shape[1]//2, Vmask.shape[0]//2), interpolation=cv2.INTER_AREA)
         except Exception as e:
