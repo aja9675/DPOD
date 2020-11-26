@@ -78,7 +78,6 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
     n_epochs = epochs
 
     # track change in validation loss
-    # TODO - if transfer learning, don't assume infinity here, run validation once first
     valid_loss_min = np.Inf
 
     for epoch in range(1, n_epochs+1):
@@ -178,7 +177,8 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
         # TODO - monitor for train/val divergence and stop
 
         # save model if validation loss has decreased
-        if valid_loss <= valid_loss_min:
+        # Don't save model on the first epoch in case we're transfer learning and initialized to Inf
+        if valid_loss <= valid_loss_min and (epoch > 1 or epochs == 1):
             print('Validation loss decreased ({:.6f} --> {:.6f}).  Saving model ...'.format(
                 valid_loss_min, valid_loss))
 
