@@ -9,6 +9,7 @@ import argparse
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 import unet_model as UNET
 from copy import deepcopy
 import time
@@ -20,7 +21,6 @@ from scipy.spatial.transform import Rotation as R
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision import transforms
-
 
 #SHOW_RESULTS = True
 SHOW_RESULTS = True
@@ -52,17 +52,30 @@ transform = transforms.Compose([transforms.ToPILImage(mode=None),
 
 correspondence_block = UNET.UNet(n_channels=3, out_channels_id=14, bilinear=True)
 
-print("Loading correspondence block")
 # load the best weights from the training loop
 correspondence_block_filename = os.path.join(train_eval_dir, 'correspondence_block.pt')
+print("Loading correspondence block: %s" % correspondence_block_filename)
 correspondence_block.load_state_dict(torch.load(correspondence_block_filename, map_location=torch.device('cpu')))
 
 correspondence_block.cuda()
-correspondence_block.eval()
+#correspondence_block.train()
+# Results are very poor with eval()
+#correspondence_block.eval()
 
 print("Listing all images")
 list_all_images = load_obj(os.path.join(root_dir, "all_images_adr"))
-testing_images_idx = load_obj(os.path.join(train_eval_dir, "test_images_indices"))
+
+if 0: # Hack for initial debugging
+    testing_images_idx = load_obj(os.path.join(train_eval_dir, "train_images_indices"))
+
+    for i in testing_images_idx:
+        img_adr = list_all_images[i]
+        label = os.path.split(os.path.split(os.path.dirname(img_adr))[0])[1]
+        instances[label] += 1
+        #unique, counts = np.unique(testing_images_idx, return_counts=True)
+    print(instances)
+else:
+    testing_images_idx = load_obj(os.path.join(train_eval_dir, "test_images_indices"))
 
 regex = re.compile(r'\d+')
 upsampled = nn.Upsample(size=[240, 320], mode='bilinear', align_corners=False)
@@ -83,47 +96,41 @@ for i in testing_images_idx:
     label = os.path.split(os.path.split(os.path.dirname(img_adr))[0])[1]
     idx = regex.findall(os.path.split(img_adr)[1])[0]
 
-    tra_adr = os.path.join(root_dir, label + "/data/tra" + str(idx) + ".tra")
-    rot_adr = os.path.join(root_dir, label + "/data/rot" + str(idx) + ".rot")
-    true_pose = get_rot_tra(rot_adr, tra_adr)
-
     test_img = cv2.imread(img_adr)
     test_img_orig = deepcopy(test_img)
     test_img = cv2.resize(test_img, (test_img.shape[1]//2, test_img.shape[0]//2), interpolation=cv2.INTER_AREA)
 
-    test_img = torch.from_numpy(test_img).type(torch.double)
+    showImage("test_img", cv2.resize(test_img, disp_size), hold=False)
+
+    test_img = torch.from_numpy(test_img).type(torch.float)
     test_img = test_img.transpose(1, 2).transpose(0, 1)
 
     if len(test_img.shape) != 4:
-        test_img = test_img.view(
-            1, test_img.shape[0], test_img.shape[1], test_img.shape[2])
+        test_img = test_img.view(1, test_img.shape[0], test_img.shape[1], test_img.shape[2])
 
     # pass through correspondence block
     start_time = time.time()
-    idmask_pred = correspondence_block(test_img.float().cuda())
+
+    idmask_pred = correspondence_block(test_img.cuda())
     if TIMEIT:
         print("correspondence_block: %s seconds ---" % (time.time() - start_time))
 
+    show_predictions_tiled(idmask_pred, hold=False)
+
     # convert the masks to 240,320 shape
-    temp = torch.argmax(idmask_pred, dim=1).squeeze().cpu()
-    coord_2d = (temp == classes[label]).nonzero(as_tuple=True)
+    idmask_pred = idmask_pred.squeeze()
+    idmask_max_pred = torch.argmax(idmask_pred, dim=0).cpu()
+    coord_2d = (idmask_max_pred == classes[label]).nonzero(as_tuple=True)
+
+    idmask_pred_cpu = np.uint8(idmask_max_pred.detach().numpy())
+    mask_scalar = 3 # Just for visualization
+    idmask_color = color_linemod_idmask_img(idmask_pred_cpu)
+    showImage("idmask_color", cv2.resize(idmask_color, None,fx=mask_scalar,fy=mask_scalar))
 
     if coord_2d[0].nelement() != 0:  # label is detected in the image
-
-        idmask_pred_cpu = np.uint8(temp.detach().numpy())
-        #print(np.unique(idmask_pred_cpu))
-        #idmask_pred_cpu = idmask_pred_cpu * (255 // np.max(idmask_pred_cpu))
-        #print(np.unique(idmask_pred_cpu))
-        #cv2.imshow("idmask", idmask_pred_cpu)
-
-        print(img_adr)
-
-        mask_scalar = 3 # Just for visualization
-        idmask_color = color_linemod_idmask_img(idmask_pred_cpu)
-        cv2.imshow("idmask_color", cv2.resize(idmask_color, None,fx=mask_scalar,fy=mask_scalar))
-
-        showImage("test_img_orig", cv2.resize(test_img_orig, disp_size))
+        #print("Success: %s" % img_adr)
+        #showImage("test_img_orig", cv2.resize(test_img_orig, disp_size))
+        pass
 
     else:
         print("%i Failed to find label" % i)
-
