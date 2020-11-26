@@ -48,6 +48,11 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
 
     correspondence_block.cuda()
 
+    if 0:
+        from torchsummary import summary
+        summary(correspondence_block, input_size=(3, 240, 320))
+        sys.exit(1)
+
     # custom loss function and optimizer
     weight_classes = False
     if weight_classes:
@@ -55,7 +60,7 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
         # However, not sure what the weighting is, so taking a guess
         # Note we don't need to normalize when using the default 'reduction' arg
         class_weights = np.ones(len(classes)+1) # +1 for background
-        class_weights[0] = 0.5
+        class_weights[0] = 0.1
         criterion_id = nn.CrossEntropyLoss(torch.tensor(class_weights, dtype=torch.float32).cuda())
     else:
         criterion_id = nn.CrossEntropyLoss()
@@ -65,7 +70,7 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
 
     # specify optimizer
     optimizer = optim.Adam(correspondence_block.parameters(), lr=3e-4, weight_decay=3e-5)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=2)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=2, verbose=True)
 
     # training loop
 
