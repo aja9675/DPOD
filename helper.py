@@ -20,11 +20,12 @@ def load_obj(name):
 
 # helper function to plot grpahs
 
-def showImage(window="image", img=None):
+def showImage(window="image", img=None, hold=True):
     cv2.imshow(window, img)
-    key = cv2.waitKey(0) & 0xFF
-    if key == 27:
-        sys.exit(0)
+    if hold:
+        key = cv2.waitKey(0) & 0xFF
+        if key == 27:
+            sys.exit(0)
 
 
 def visualize(array):
@@ -120,7 +121,7 @@ def color_uv(umask, vmask):
     return color_img
 
 # Expecting raw logits tensor with 14 channels
-def show_predictions_tiled(pred):
+def show_predictions_tiled(pred, hold=True):
     #if pred.dtype != np.uint8 or np.max(pred) > 255 or np.min(pred) < 0:
     #    pred = cv2.normalize(src=pred, dst=None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
     pred = np.squeeze(pred)
@@ -133,7 +134,10 @@ def show_predictions_tiled(pred):
     top = np.hstack(probs[0:7,:,:])
     bot = np.hstack(probs[7:14,:,:])
     pred_tiled = np.vstack((top,bot))
-    showImage("Tiled predictions", pred_tiled)
+    if hold:
+        showImage("Tiled predictions", pred_tiled)
+    else:
+        cv2.imshow("Tiled predictions", pred_tiled)
 
 def draw_axis(img, pose, intrinsic_matrix, colors=[(0,0,255), (0,255,0), (255,0,0)], axis_len=10):
     # If only one color is specified
