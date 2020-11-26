@@ -5,6 +5,8 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 
+import torch.nn.functional as F
+
 
 # Pickle functions to save and load dictionaries
 def save_obj(obj, name):
@@ -116,6 +118,22 @@ def color_uv(umask, vmask):
     color_img[:,:,2] = 0
 
     return color_img
+
+# Expecting raw logits tensor with 14 channels
+def show_predictions_tiled(pred):
+    #if pred.dtype != np.uint8 or np.max(pred) > 255 or np.min(pred) < 0:
+    #    pred = cv2.normalize(src=pred, dst=None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    pred = np.squeeze(pred)
+    # Apply softmax to get probabilities for each class
+    probs = F.softmax(pred, dim=0)
+    # Normalize for viewing
+    probs = probs.cpu().detach().numpy()
+    probs = cv2.normalize(src=probs, dst=None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    # Stack for viewing
+    top = np.hstack(probs[0:7,:,:])
+    bot = np.hstack(probs[7:14,:,:])
+    pred_tiled = np.vstack((top,bot))
+    showImage("Tiled predictions", pred_tiled)
 
 def draw_axis(img, pose, intrinsic_matrix, colors=[(0,0,255), (0,255,0), (255,0,0)], axis_len=10):
     # If only one color is specified
