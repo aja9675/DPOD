@@ -14,7 +14,7 @@ from dataset_classes import LineMODDataset
 
 
 def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, batch_size=4, \
-                                out_path_and_name=None, corr_transfer=None):
+                               accum_grad_batch_size=1, out_path_and_name=None, corr_transfer=None):
 
     train_data = LineMODDataset(root_dir, train_eval_dir, classes=classes,
                                 transform=transforms.Compose([transforms.ToTensor(),
@@ -72,14 +72,15 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
     optimizer = optim.Adam(correspondence_block.parameters(), lr=3e-4, weight_decay=3e-5)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=2, verbose=True)
 
-    # training loop
-
     # number of epochs to train the model
     n_epochs = epochs
-
     # track change in validation loss
     valid_loss_min = np.Inf
 
+    if accum_grad_batch_size != 1:
+        print("Gradient accumulator batch size: %i" % accum_grad_batch_size)
+
+    # training loop
     for epoch in range(1, n_epochs+1):
         # keep track of training and validation loss
         train_loss = 0.0
@@ -95,42 +96,47 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
         ###################
         batch_cnt = 0
         correspondence_block.train()
+        # clear the gradients of all optimized variables
+        optimizer.zero_grad()
         for img_adr, image, idmask, umask, vmask in train_loader:
-
             assert image.shape[1] == correspondence_block.n_channels, \
                     f'Network has been defined with {correspondence_block.n_channels} input channels, ' \
                     f'but loaded images have {image.shape[1]} channels. Please check that ' \
                     'the images are loaded correctly.'
-
             if batch_cnt % 100 == 0:
                 print("Batch %i/%i finished!" % (batch_cnt, len(train_idx)/batch_size))
-
             # move tensors to GPU if CUDA is available
             image, idmask, umask, vmask = image.cuda(), idmask.cuda(), umask.cuda(), vmask.cuda()
-            # clear the gradients of all optimized variables
-            optimizer.zero_grad()
             # forward pass: compute predicted outputs by passing inputs to the model
             idmask_pred, umask_pred, vmask_pred = correspondence_block(image)
-            # calculate the batch loss
-            loss_id = criterion_id(idmask_pred, idmask)
-            loss_u = criterion_u(umask_pred, umask)
-            loss_v = criterion_v(vmask_pred, vmask)
+            # Calculate the batch loss
+            # Need to divide by accum_grad_batch_size to account for accumulated gradients
+            loss_id = criterion_id(idmask_pred, idmask) / accum_grad_batch_size
+            loss_u = criterion_u(umask_pred, umask) / accum_grad_batch_size
+            loss_v = criterion_v(vmask_pred, vmask) / accum_grad_batch_size
             total_loss = loss_id + loss_u + loss_v
             # backward pass: compute gradient of the loss with respect to model parameters
             total_loss.backward()
-            # perform a single optimization step (parameter update)
-            optimizer.step()
             # update training loss
+            # Note that .item() also releases the memory. DON'T accumulate the criterion obj
             train_idmask_loss += loss_id.item()
             train_umask_loss += loss_u.item()
             train_vmask_loss += loss_v.item()
             train_loss += total_loss.item()
+            # Only update once every accum_grad_batch_size
+            if (batch_cnt+1) % accum_grad_batch_size == 0:
+                # perform a single optimization step (parameter update)
+                optimizer.step()
+                # Reset gradients, for next accumulated batch
+                optimizer.zero_grad()
             batch_cnt += 1
+
         ######################
         # validate the model #
         ######################
         print("Validating...")
         correspondence_block.eval()
+        optimizer.zero_grad()
         batch_cnt = 0
         with torch.no_grad(): # This is critical to limit GPU memory use
             for img_adr, image, idmask, umask, vmask in valid_loader:
@@ -153,7 +159,7 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
                 valid_loss += total_loss.item()
                 batch_cnt += 1
 
-        # calculate average losses
+        # Calculate average losses
         train_loss = train_loss/len(train_loader.sampler)
         train_idmask_loss = train_idmask_loss/len(train_loader.sampler)
         train_umask_loss = train_umask_loss/len(train_loader.sampler)
@@ -167,9 +173,9 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
         # print training/validation statistics
         print('Epoch: {} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f}'.format(
             epoch, train_loss, valid_loss))
-        print('Train IDMask loss: %.6f \tUMask loss: %.3f \tUMask loss: %.3f' % \
+        print('Train IDMask loss: %.6f \tUMask loss: %.6f \tUMask loss: %.6f' % \
             (train_idmask_loss, train_umask_loss, train_vmask_loss))
-        print('Valid IDMask loss: %.6f \tUMask loss: %.3f \tUMask loss: %.3f' % \
+        print('Valid IDMask loss: %.6f \tUMask loss: %.6f \tUMask loss: %.6f' % \
             (valid_idmask_loss, valid_umask_loss, valid_vmask_loss))
 
         scheduler.step(valid_loss)
@@ -188,4 +194,6 @@ def train_correspondence_block(root_dir, train_eval_dir, classes, epochs=10, bat
                 correspondence_block_filename = out_path_and_name
 
             torch.save(correspondence_block.state_dict(), correspondence_block_filename)
+            valid_loss_min = valid_loss
+        if epoch == 1:
             valid_loss_min = valid_loss
