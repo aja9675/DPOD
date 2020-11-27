@@ -174,8 +174,12 @@ def draw_point_cloud(img, pose, pt_cld, intrinsic_matrix, color=(0,0,255)):
 #Evaluation metric - ADD score
 def ADD_vis(img, pt_cld, true_pose, pred_pose, intrinsic_matrix):
 
-    target_pt_cld = pt_cld @ true_pose[0:3, 0:3] + np.array([true_pose[0, 3], true_pose[1, 3], true_pose[2, 3]])
-    output_pt_cld = pt_cld @ pred_pose[0:3, 0:3] + np.array([pred_pose[0, 3], pred_pose[1, 3], pred_pose[2, 3]])
+    # Add column of ones to pt_cld for homog transform
+    ones = np.ones((pt_cld.shape[0], 1))
+    pt_cld = np.hstack((pt_cld, ones))
+
+    target_pt_cld = pt_cld @ true_pose.T
+    output_pt_cld = pt_cld @ pred_pose.T
     assert(len(target_pt_cld) == len(output_pt_cld))
 
     zero_rot = np.eye(3)
@@ -191,12 +195,10 @@ def ADD_vis(img, pt_cld, true_pose, pred_pose, intrinsic_matrix):
     for pt in output_pts[::10]:
         img = cv2.circle(img, (pt[0],pt[1]), 1, (0,0,255), 1)
 
-    #target_pt_cld = target_pt_cld + np.array([true_pose[0, 3], true_pose[1, 3], true_pose[2, 3]])
-    #output_pt_cld = output_pt_cld + np.array([pred_pose[0, 3], pred_pose[1, 3], pred_pose[2, 3]])
-    #print(pt_cld.shape)
-    #avg_distance = (np.linalg.norm(output_pt_cld - target_pt_cld)) / pt_cld.shape[0]
+    # TODO - draw a sparser cloud, and connect each point correspondence
+    avg_distance = (np.linalg.norm(output_pt_cld - target_pt_cld)) / pt_cld.shape[0]
     avg_distance = np.sum(np.linalg.norm(output_pt_cld - target_pt_cld, axis=1)) / pt_cld.shape[0]
-    #print("avg_distance %f: " % avg_distance)
+    print("avg_distance %f: " % avg_distance)
 
     return img
 
