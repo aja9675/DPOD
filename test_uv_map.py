@@ -75,7 +75,7 @@ for i in testing_images_idx:
     idx = regex.findall(os.path.split(img_adr)[1])[0]
 
     test_img = cv2.imread(img_adr)
-    print(test_img.shape)
+    #print(test_img.shape)
     cv2.imshow("test_img", cv2.resize(test_img, disp_size))
 
     tra_adr = os.path.join(root_dir, label + "/data/tra" + str(idx) + ".tra")
@@ -93,42 +93,28 @@ for i in testing_images_idx:
     vmask_gt = cv2.resize(vmask_gt, (test_img.shape[1], test_img.shape[0]), interpolation=cv2.INTER_AREA)
     print(umask_gt.shape)
     uvmask_color_gt = color_uv(umask_gt, vmask_gt)
-    print(uvmask_color_gt.shape)
+    #print(uvmask_color_gt.shape)
 
     idmask_color = color_linemod_idmask_img(idmask_gt)
     cv2.imshow("idmask_color", idmask_color)
-
     cv2.imshow("uvmask_color_gt", uvmask_color_gt)
 
     uv_xyz_dct = load_obj(os.path.join(root_dir, label + "/UV-XYZ_mapping"))
 
     # Get 2D coords from ID mask (row, col)
     coord_2d = np.argwhere(idmask_gt == classes[label])
-    # Need to swap rows and cols to match image format (col, row)
-    coord_2d[:,[0, 1]] = coord_2d[:,[1, 0]]
 
     # Check that the points are correct
-    for pt in coord_2d:
-        test_img = cv2.circle(test_img, (pt[0],pt[1]), 1, (0,255,0), 1)
-    showImage("test_imgcirc", cv2.resize(test_img, disp_size))
-
-    print("num coords %i" % len(coord_2d))
-    print(coord_2d.shape)
-    print(coord_2d)
-
-    print("maxrow %i" % np.max(coord_2d[:,1]))
-    print("maxcol %i" % np.max(coord_2d[:,0]))
+    if 0:
+        for pt in coord_2d:
+            # Note OpenCV points are (col,row)
+            test_img = cv2.circle(test_img, (pt[1],pt[0]), 1, (0,255,0), 1)
+        showImage("test_imgcirc", cv2.resize(test_img, disp_size))
 
     # At each coord, find the U and V values (row, col)
-    uvalues = umask_gt[coord_2d[:,1], coord_2d[:,0]]
-    vvalues = vmask_gt[coord_2d[:,1], coord_2d[:,0]]
-
-    # Stack U and V into a list of UV tuples
+    uvalues = umask_gt[coord_2d[:,0], coord_2d[:,1]]
+    vvalues = vmask_gt[coord_2d[:,0], coord_2d[:,1]]
     uv_values = np.vstack((uvalues,vvalues)).T
-
-    print(len(uv_values))
-    print(uv_values.shape)
-
 
     mapping_2d = []
     mapping_3d = []
@@ -137,11 +123,9 @@ for i in testing_images_idx:
             mapping_2d.append(np.array(coord_2d[count]))
             mapping_3d.append(uv_xyz_dct[(u, v)])
 
-
-
-    print("Num matches")
-    print(len(mapping_2d))
-    print(len(mapping_3d))
+    # Need to swap (row,col) to (col,row) for OpenCV points in solvePnPRansac
+    mapping_2d = np.array(mapping_2d)
+    mapping_2d[:,[0, 1]] = mapping_2d[:,[1, 0]]
 
     # PnP needs atleast 6 unique 2D-3D correspondences to run
     if len(mapping_2d) >= 6 or len(mapping_3d) >= 6:
@@ -159,8 +143,8 @@ for i in testing_images_idx:
     print("Translational error pred: %s: " % str(trans_error_pred))
 
     try:
-        print(true_pose)
-        print(pred_pose)
+        #print(true_pose)
+        #print(pred_pose)
         axis_img = deepcopy(test_img)
         draw_axis(axis_img, true_pose, intrinsic_matrix, colors=(0,255,0))
         draw_axis(axis_img, pred_pose, intrinsic_matrix, colors=(255,0,0))
