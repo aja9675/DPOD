@@ -170,6 +170,7 @@ for i in testing_images_idx:
         if len(mapping_2d) >= 6 or len(mapping_3d) >= 6:
             # Need to swap (row,col) to (col,row) for OpenCV points in solvePnPRansac
             mapping_2d = np.array(mapping_2d)
+            # Need to scale the image back up to the size the correspondence map is encoded with
             mapping_2d = mapping_2d * 2
             mapping_2d[:,[0, 1]] = mapping_2d[:,[1, 0]]
 
