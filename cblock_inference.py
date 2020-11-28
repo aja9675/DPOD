@@ -135,8 +135,6 @@ for i in testing_images_idx:
     vpred = torch.argmax(vmask_pred, dim=1).squeeze().cpu()
     coord_2d = (temp == classes[label]).nonzero(as_tuple=True)
 
-    print(upred.shape)
-
     if SHOW_RESULTS:
         upred_cpu = np.uint8(upred.detach().numpy())
         #cv2.imshow("upred_cpu", cv2.resize(upred_cpu, disp_size))
@@ -232,8 +230,7 @@ for i in testing_images_idx:
             #pcld_img = draw_point_cloud(pcld_img, true_pose, pt_cld, intrinsic_matrix, color=(0,255,0))
             #pcld_img = draw_point_cloud(pcld_img, orig_pred_pose, pt_cld, intrinsic_matrix, color=(255,0,0))
 
-            #def ADD_vis(img, pt_cld, true_pose, pred_pose, intrinsic_matrix):
-            pcld_img = ADD_vis(pcld_img, pt_cld, true_pose, orig_pred_pose, intrinsic_matrix)
+            #pcld_img = ADD_vis(pcld_img, pt_cld, true_pose, orig_pred_pose, intrinsic_matrix)
 
         except Exception as e:
             print("Got '%s' for %i" % (e,i))

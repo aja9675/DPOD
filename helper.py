@@ -198,7 +198,7 @@ def ADD_vis(img, pt_cld, true_pose, pred_pose, intrinsic_matrix):
     # TODO - draw a sparser cloud, and connect each point correspondence
     avg_distance = (np.linalg.norm(output_pt_cld - target_pt_cld)) / pt_cld.shape[0]
     avg_distance = np.sum(np.linalg.norm(output_pt_cld - target_pt_cld, axis=1)) / pt_cld.shape[0]
-    print("avg_distance %f: " % avg_distance)
+    #print("avg_distance %f: " % avg_distance)
 
     return img
 
