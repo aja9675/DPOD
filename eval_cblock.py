@@ -3,6 +3,7 @@
 import sys
 import os
 import re
+import math
 import cv2
 import torch
 import argparse
@@ -12,11 +13,8 @@ import torch.optim as optim
 import unet_model as UNET
 
 from helper import load_obj, ADD_score, save_obj
-from torchvision import transforms, utils
+from torchvision import utils
 from create_ground_truth import get_rot_tra
-from torch.utils.data import Dataset, DataLoader
-from torch.utils.data.sampler import SubsetRandomSampler
-from torchvision import transforms
 
 # ADD threshold Kd parameter. This is a fixed fractional scalar that's applied to the
 # object's diameter to determine accuracy percentage.
@@ -40,10 +38,10 @@ score_card = {'ape': 0, 'benchviseblue': 0, 'cam': 0, 'can': 0, 'cat': 0, 'drill
 instances = {'ape': 0, 'benchviseblue': 0, 'cam': 0, 'can': 0, 'cat': 0, 'driller': 0,
              'duck': 0, 'eggbox': 0, 'glue': 0, 'holepuncher': 0, 'iron': 0, 'lamp': 0, 'phone': 0}
 
-transform = transforms.Compose([transforms.ToPILImage(mode=None),
-                                transforms.Resize(size=(224, 224)),
-                                transforms.ToTensor(),
-                                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
+translation_error_norms = []
+translation_errors = []
+rotation_errors = []
+
 fx = 572.41140
 px = 325.26110
 fy = 573.57043
@@ -60,16 +58,16 @@ correspondence_block.load_state_dict(torch.load(correspondence_block_filename, m
 correspondence_block.cuda()
 #correspondence_block.eval()
 
-print("Listing all images")
 list_all_images = load_obj(os.path.join(root_dir, "all_images_adr"))
 testing_images_idx = load_obj(os.path.join(train_eval_dir, "test_images_indices"))
+#testing_images_idx = testing_images_idx[:20] # for debugging
 
 regex = re.compile(r'\d+')
 upsampled = nn.Upsample(size=[240, 320], mode='bilinear', align_corners=False)
 total_score = 0
 print("For all %i test images..." % len(testing_images_idx))
 for i in range(len(testing_images_idx)):
-    if i % 100 == 0:
+    if i % 1000 == 0:
         print("\t %i / %i" % (i, len(testing_images_idx)))
 
     img_adr = list_all_images[testing_images_idx[i]]
@@ -137,13 +135,54 @@ for i in range(len(testing_images_idx)):
         total_score += score
         score_card[label] += score
 
+        # My eval metrics:
+        xyz_diff = true_pose[:,3] - pred_pose[:,3]
+        trans_error_norm = np.linalg.norm(xyz_diff)
+        #print("Translational error norm: %s: " % str(trans_error_norm))
+
+        # Only calculate these if we were under diameter_threshold
+        if trans_error_norm < diameter_threshold:
+            translation_error_norms.append(trans_error_norm)
+            translation_errors.append(xyz_diff)
+
+            # Convert both GT and predicted poses to homogenous
+            pred_homo = np.hstack((rot, tvecs))
+            pred_homo = np.vstack((pred_homo, np.array([0,0,0,1])))
+            true_pose = np.vstack((true_pose, np.array([0,0,0,1])))
+            # Calculate the transform from GT to predicted
+            gt_to_pred_tf = np.linalg.inv(true_pose) @ pred_homo
+            gt_to_pred_tf = gt_to_pred_tf[:3,:]
+
+            # Convert to Euler angles
+            projmat = intrinsic_matrix.dot(gt_to_pred_tf)
+            # decomposeProjectionMatrix does RQ decomp and returns euler angles in degrees about x,y,z
+            euler_angles_degrees = cv2.decomposeProjectionMatrix(projmat)[-1]
+            #print(euler_angles_degrees)
+            rotation_errors.append(euler_angles_degrees)
+
     else:
         score_card[label] += 0
 
     instances[label] += 1
 
-print("ADD Score for all testing images is: %.3f%%" % (total_score*100/len(testing_images_idx)))
+print("ADD Score for all testing images is: %.3f%%" % (100*total_score/len(testing_images_idx)))
+print("Translational accuracy score for all testing images is: %.3f%%\n" % (100*len(translation_error_norms)/len(testing_images_idx)))
+
 print("Instances:")
 print(instances)
 print("Score card:")
 print(score_card)
+
+class_rates = {}
+for label in instances:
+    class_rates[label] = (100*score_card[label]/instances[label]) if instances[label] else 0.0
+print("class_rates:")
+for label in class_rates:
+    print("%s: %.2f" % (label, class_rates[label]))
+print()
+
+print("Average translational error norm: %s" % (np.sum(translation_error_norms)/len(translation_error_norms)))
+print("Average translational error: %s" % np.mean(translation_errors, axis=0))
+print("Average abs translational error: %s" % np.mean(np.abs(translation_errors), axis=0))
+print("Average rotational errors:\n %s" % np.mean(rotation_errors, axis=0))
+print("Average abs rotational errors:\n %s" % np.mean(np.abs(rotation_errors), axis=0))
