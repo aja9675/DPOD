@@ -109,6 +109,7 @@ for i in range(len(testing_images_idx)):
                 mapping_2d.append(np.array(coord_2d[count]))
                 mapping_3d.append(dct[(u, v)])
 
+
         # PnP needs atleast 6 unique 2D-3D correspondences to run
         if len(mapping_2d) >= 6 or len(mapping_3d) >= 6:
             # Need to swap (row,col) to (col,row) for OpenCV points in solvePnPRansac
@@ -116,9 +117,15 @@ for i in range(len(testing_images_idx)):
             # Need to scale the image back up to the size the correspondence map is encoded with
             mapping_2d = mapping_2d * 2
             mapping_2d[:,[0, 1]] = mapping_2d[:,[1, 0]]
-            _, rvecs, tvecs, inliers = cv2.solvePnPRansac(np.array(mapping_3d, dtype=np.float32),
-                                                          np.array(mapping_2d, dtype=np.float32), intrinsic_matrix, distCoeffs=None,
-                                                          iterationsCount=150, reprojectionError=1.0, flags=cv2.SOLVEPNP_P3P)
+            mapping_3d = np.array(mapping_3d, dtype=np.float32)
+            mapping_2d = np.array(mapping_2d, dtype=np.float32)
+
+            _, rvecs, tvecs, inliers = cv2.solvePnPRansac(mapping_3d, mapping_2d, intrinsic_matrix, distCoeffs=None,
+                                                      iterationsCount=300, reprojectionError=1.0, flags=cv2.SOLVEPNP_P3P)
+
+            refine_criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, sys.float_info.epsilon)
+            rvecs, tvecs = cv2.solvePnPRefineLM(mapping_3d, mapping_2d, intrinsic_matrix, None, rvecs, tvecs, refine_criteria)
+
             rot, _ = cv2.Rodrigues(rvecs, jacobian=None)
             pred_pose = np.append(rot, tvecs, axis=1)
 
