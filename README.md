@@ -16,15 +16,20 @@ Model was trained and tested entirely on the Linemod dataset [[2]](#references).
 
 ## Installation and Training steps
 
+Note: I'm only training and evaluating the correspondence block.
+
 ```
 $ git clone https://github.com/yshah43/DPOD.git
 $ cd DPOD
 $ chmod +x dataset_install.sh
 $ ./dataset_install.sh
 $ pip install -r requirements.txt
-$ python train.py
-$ python eval.py
-
+$ python setup_dataset.py /path/to/LineMOD_Dataset/ /path/to/val2017 /path/to/50_percent_split --split 0.50
+$ python train.py /content/DPOD/LineMOD_Dataset/ /path/to/50_percent_split train_correspondence \
+  --epochs 10 \
+  --batch_size 8 \
+  --corr_block_out /path/to/50_percent_split/correspondence_block_10ep_8bs.pt
+$ eval_cblock.py /path/to/LineMOD_Dataset/ /path/to/50_percent_split
 ```
 
 ## Overview of the code
@@ -36,7 +41,7 @@ Below is a brief description of the .py files:
 4. create_renderings.py - create input for DL based pose refiner
 5. pose_refinement.py - training loop for DL based pose refiner
 6. train.py - trainining script for all of the above
-7. eval.py - evaluation script for all of the above
+7. eval_cblock.py - evaluate the correspondence block
 
 ## Future Work
 
